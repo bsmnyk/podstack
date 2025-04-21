@@ -10,6 +10,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   setupAuthRoutes(app);
 
+  // Google OAuth routes
+  app.get("/api/auth/google/authorize", (_req, res) => {
+    const authUrl = getAuthUrl();
+    res.redirect(authUrl);
+  });
+
+  app.get("/api/auth/google/callback", handleGoogleCallback);
+
+  app.post("/api/auth/google/exchange", handleTokenExchange);
+
+  // Gmail API routes
+  app.get("/api/gmail/messages", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const accessToken = req.headers.authorization?.split(" ")[1];
+      if (!accessToken) {
+        return res.status(401).json({ message: "Access token required" });
+      }
+
+      const query = req.query.q as string || "category:primary is:unread label:newsletter";
+      const maxResults = req.query.maxResults ? parseInt(req.query.maxResults as string) : 10;
+
+      const emails = await fetchGmailEmails(accessToken, query, maxResults);
+      res.json(emails);
+    } catch (error) {
+      console.error("Error fetching Gmail messages:", error);
+      res.status(500).json({ message: "Failed to fetch Gmail messages" });
+    }
+  });
+
   // API Routes - prefix all routes with /api
   
   // Categories

@@ -28,18 +28,25 @@ export function redirectToOAuthProvider(provider: string): void {
 
 export function setupAuthMessageListener(callback: (data: any) => void): () => void {
   const handleMessage = (event: MessageEvent) => {
+    console.log('Received message:', event);
+    
     // Validate origin for security
     const allowedOrigins = (import.meta.env.VITE_REPLIT_DOMAINS || "").split(",");
     if (!allowedOrigins.includes(event.origin) && event.origin !== window.location.origin) {
+      console.log('Origin not allowed:', event.origin);
       return;
     }
 
     // Process auth message
     if (event.data && event.data.type === "auth_callback") {
+      console.log('Processing auth callback:', event.data);
       callback(event.data);
+    } else {
+      console.log('Not an auth callback message:', event.data);
     }
   };
 
+  console.log('Setting up auth message listener');
   window.addEventListener("message", handleMessage);
   return () => window.removeEventListener("message", handleMessage);
 }

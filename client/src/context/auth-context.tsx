@@ -1,11 +1,17 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getMe, logout as logoutApi, redirectToOAuthProvider, setupAuthMessageListener } from "@/lib/auth";
+import { getGmailAuthUrl, exchangeCodeForTokens, setCredentials } from "@/lib/googleAuth";
 import { User } from "@shared/schema";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface AuthContextType {
   user: User | null;
   isAuthenticating: boolean;
+  tokens: {
+    access_token?: string;
+    refresh_token?: string;
+    expiry_date?: number;
+  } | null;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
   loginWithTwitter: () => Promise<void>;
@@ -17,6 +23,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticating: false,
+  tokens: null,
   loginWithGoogle: async () => {},
   loginWithFacebook: async () => {},
   loginWithTwitter: async () => {},
@@ -52,10 +59,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     fetchUser();
   }, []);
 
+  // Store access tokens for API requests
+  const [tokens, setTokens] = useState<{
+    access_token?: string;
+    refresh_token?: string;
+    expiry_date?: number;
+  } | null>(null);
+
   // Set up message listener for OAuth callbacks
   useEffect(() => {
     const cleanup = setupAuthMessageListener(async (data) => {
       if (data.success) {
+        // If we have tokens in the message, store them
+        if (data.tokens) {
+          console.log("Received tokens from OAuth callback");
+          
+          // Save tokens in state for API requests
+          setTokens({
+            access_token: data.tokens.access_token,
+            refresh_token: data.tokens.refresh_token,
+            expiry_date: Date.now() + (data.tokens.expires_in || 3600) * 1000
+          });
+          
+          // Set up Google API client with these tokens
+          if (data.tokens.access_token) {
+            setCredentials(data.tokens);
+          }
+        }
+        
         // Refresh user data after successful login
         const userData = await getMe();
         setUser(userData);
@@ -84,7 +115,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const loginWithGoogle = async () => {
-    return loginWithProvider("google");
+    setIsAuthenticating(true);
+    try {
+      // Use Gmail-specific OAuth URL that includes Gmail API scopes
+      const authUrl = getGmailAuthUrl();
+      
+      // Open OAuth window
+      const width = 600;
+      const height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2.5;
+      
+      window.open(
+        authUrl,
+        "googleAuth",
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+    } catch (error) {
+      setIsAuthenticating(false);
+      console.error("Google login error:", error);
+    }
   };
 
   const loginWithFacebook = async () => {
@@ -122,6 +172,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       value={{
         user,
         isAuthenticating,
+        tokens,
         loginWithGoogle,
         loginWithFacebook,
         loginWithTwitter,
