@@ -25,7 +25,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const menuItemClass = (path: string) => {
     return cn(
       "flex items-center p-4 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700",
-      isActive(path) && "bg-primary bg-opacity-10 text-primary dark:text-primary-light border-r-4 border-primary"
+      isActive(path) && "bg-primary/10 text-primary dark:text-primary border-r-4 border-primary"
     );
   };
 
@@ -50,42 +50,42 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <ul>
           <li>
             <Link href="/">
-              <a className={menuItemClass("/")}>
+              <div className={menuItemClass("/")}>
                 <span className="material-icons mr-3">dashboard</span>
                 <span>Dashboard</span>
-              </a>
+              </div>
             </Link>
           </li>
           <li>
             <Link href="/discover">
-              <a className={menuItemClass("/discover")}>
+              <div className={menuItemClass("/discover")}>
                 <span className="material-icons mr-3">explore</span>
                 <span>Discover</span>
-              </a>
+              </div>
             </Link>
           </li>
           <li>
             <Link href="/library">
-              <a className={menuItemClass("/library")}>
+              <div className={menuItemClass("/library")}>
                 <span className="material-icons mr-3">library_books</span>
                 <span>My Library</span>
-              </a>
+              </div>
             </Link>
           </li>
           <li>
             <Link href="/categories">
-              <a className={menuItemClass("/categories")}>
+              <div className={menuItemClass("/categories")}>
                 <span className="material-icons mr-3">category</span>
                 <span>Categories</span>
-              </a>
+              </div>
             </Link>
           </li>
           <li>
             <Link href="/settings">
-              <a className={menuItemClass("/settings")}>
+              <div className={menuItemClass("/settings")}>
                 <span className="material-icons mr-3">settings</span>
                 <span>Settings</span>
-              </a>
+              </div>
             </Link>
           </li>
         </ul>
