@@ -29,7 +29,7 @@ export function redirectToOAuthProvider(provider: string): void {
 export function setupAuthMessageListener(callback: (data: any) => void): () => void {
   const handleMessage = (event: MessageEvent) => {
     // Validate origin for security
-    const allowedOrigins = (process.env.REPLIT_DOMAINS || "").split(",");
+    const allowedOrigins = (import.meta.env.VITE_REPLIT_DOMAINS || "").split(",");
     if (!allowedOrigins.includes(event.origin) && event.origin !== window.location.origin) {
       return;
     }
