@@ -15,25 +15,25 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Categories from "@/pages/categories";
 import Settings from "@/pages/settings";
+import AuthCallback from "@/pages/auth-callback";
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
-
-  const closeSidebar = () => {
-    setSidebarOpen(false);
-  };
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden relative">
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
-      
+
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <Switch>
+          <Route path="/auth/callback">
+            <AuthCallback />
+          </Route>
+
           <Route path="/">
             <>
               <Header title="Dashboard" onMenuToggle={toggleSidebar} />
@@ -42,7 +42,7 @@ function Router() {
               </div>
             </>
           </Route>
-          
+
           <Route path="/categories">
             <>
               <Header title="Categories" onMenuToggle={toggleSidebar} />
@@ -51,7 +51,7 @@ function Router() {
               </div>
             </>
           </Route>
-          
+
           <Route path="/settings">
             <>
               <Header title="Settings" onMenuToggle={toggleSidebar} />
@@ -60,10 +60,7 @@ function Router() {
               </div>
             </>
           </Route>
-          
-          {/* Add more routes as needed */}
-          
-          {/* Fallback to 404 */}
+
           <Route>
             <>
               <Header title="Not Found" onMenuToggle={toggleSidebar} />
@@ -71,26 +68,15 @@ function Router() {
             </>
           </Route>
         </Switch>
-        
+
         <AudioPlayer />
       </main>
-      
-      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
     </div>
-  );
-}
-
-import AuthCallback from './pages/auth-callback';
-
-function Router() {
-  return (
-    <Switch>
-      <Route path="/auth/callback" component={AuthCallback} />
-      <Route path="/" component={Home} />
-      <Route path="/categories" component={Categories} />
-      <Route path="/settings" component={Settings} />
-      <Route component={NotFound} />
-    </Switch>
   );
 }
 
