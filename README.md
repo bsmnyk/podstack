@@ -26,16 +26,50 @@ A modern web application that transforms newsletters into an audio experience, a
 
 ## Getting Started
 
+### Prerequisites
+- Node.js (v14 or higher)
+- PostgreSQL database
+
+### Development Setup
+
 1. Clone the project in Replit
 2. Install dependencies:
    ```bash
    npm install
    ```
-3. Start the development server:
+3. Set up environment variables:
+   - `DATABASE_URL`: PostgreSQL connection URL
+   - `SESSION_SECRET`: Secret for session management
+   - `VITE_GOOGLE_CLIENT_ID`: Google OAuth client ID
+   - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
+
+4. Start the development server:
    ```bash
    npm run dev
    ```
-4. The application will be available at port 5000
+
+The application will be running at:
+- Frontend: http://0.0.0.0:5000
+- API: http://0.0.0.0:5000/api
+
+### Database Setup
+
+1. Push database schema:
+   ```bash
+   npm run db:push
+   ```
+
+### Running Type Checks
+
+```bash
+npm run check
+```
+
+### Building for Production
+
+```bash
+npm run build
+```
 
 ## Project Structure
 
