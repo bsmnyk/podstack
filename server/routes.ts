@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuthRoutes } from "./auth";
 import { z } from "zod";
 import { insertCategorySchema, insertNewsletterSchema, insertUserNewsletterSchema } from "@shared/schema";
+import { getAuthUrl, handleGoogleCallback, handleTokenExchange, fetchGmailEmails } from "./googleAuth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
