@@ -80,6 +80,20 @@ function Router() {
   );
 }
 
+import AuthCallback from './pages/auth-callback';
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/auth/callback" component={AuthCallback} />
+      <Route path="/" component={Home} />
+      <Route path="/categories" component={Categories} />
+      <Route path="/settings" component={Settings} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>

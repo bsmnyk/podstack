@@ -1,3 +1,4 @@
+
 import { apiRequest } from "./queryClient";
 
 export interface AuthToken {
@@ -14,13 +15,32 @@ export async function handleOAuthCallback(provider: string, code: string): Promi
 }
 
 export function redirectToOAuthProvider(provider: string): void {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const redirectUri = `${window.location.origin}/auth/callback`;
+  const scopes = [
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/gmail.readonly'
+  ].join(' ');
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: scopes,
+    access_type: 'offline',
+    prompt: 'consent'
+  });
+
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+  
   const width = 600;
   const height = 600;
   const left = window.screenX + (window.outerWidth - width) / 2;
   const top = window.screenY + (window.outerHeight - height) / 2.5;
   
   window.open(
-    `/api/auth/${provider}/authorize`,
+    authUrl,
     `${provider}Auth`,
     `width=${width},height=${height},left=${left},top=${top}`
   );
@@ -28,55 +48,34 @@ export function redirectToOAuthProvider(provider: string): void {
 
 export function setupAuthMessageListener(callback: (data: any) => void): () => void {
   const handleMessage = (event: MessageEvent) => {
-    console.log('Received message:', event);
-    
-    // Validate origin for security
-    const allowedOrigins = (import.meta.env.VITE_REPLIT_DOMAINS || "").split(",");
-    if (!allowedOrigins.includes(event.origin) && event.origin !== window.location.origin) {
-      console.log('Origin not allowed:', event.origin);
-      return;
-    }
+    // Only accept messages from our window
+    if (event.origin !== window.location.origin) return;
 
-    // Process auth message
-    if (event.data && event.data.type === "auth_callback") {
-      console.log('Processing auth callback:', event.data);
-      callback(event.data);
-    } else {
-      console.log('Not an auth callback message:', event.data);
+    // Check if this is an OAuth callback
+    if (event.data?.type === 'oauth_callback') {
+      const code = event.data.code;
+      if (code) {
+        handleOAuthCallback('google', code)
+          .then(tokens => {
+            callback({
+              type: 'auth_callback',
+              provider: 'google',
+              success: true,
+              tokens
+            });
+          })
+          .catch(error => {
+            callback({
+              type: 'auth_callback',
+              provider: 'google',
+              success: false,
+              error: error.message
+            });
+          });
+      }
     }
   };
 
-  console.log('Setting up auth message listener');
-  window.addEventListener("message", handleMessage);
-  return () => window.removeEventListener("message", handleMessage);
-}
-
-export async function getMe() {
-  try {
-    const response = await fetch("/api/auth/me", {
-      credentials: "include",
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        return null;
-      }
-      throw new Error("Failed to fetch user data");
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching user data:", error);
-    return null;
-  }
-}
-
-export async function logout() {
-  try {
-    await apiRequest("POST", "/api/auth/logout", {});
-    return true;
-  } catch (error) {
-    console.error("Logout error:", error);
-    return false;
-  }
+  window.addEventListener('message', handleMessage);
+  return () => window.removeEventListener('message', handleMessage);
 }
