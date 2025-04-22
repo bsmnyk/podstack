@@ -15,6 +15,11 @@ export interface StoredTokens {
   expiry_date: number;
 }
 
+export interface JwtResponse {
+  jwt: string;
+  user: User;
+}
+
 
 export async function getMe(): Promise<User> {
   const response = await apiRequest("GET", "/api/auth/user");
@@ -35,13 +40,14 @@ export async function logout(): Promise<void> {
 
   // Clear tokens from localStorage
   localStorage.removeItem("auth_tokens");
+  clearJwtToken();
 }
 
 export async function handleOAuthCallback(
   provider: string,
   code: string
-): Promise<AuthToken> {
-  const response = await apiRequest("POST", `/api/auth/${provider}/callback`, {
+): Promise<JwtResponse> {
+  const response = await apiRequest("POST", `/api/auth/${provider}/exchange`, {
     code,
   });
 
@@ -53,24 +59,8 @@ export async function handleOAuthCallback(
 }
 
 export function redirectToOAuthProvider(provider: string): void {
-  const clientId = "103225997829-j7s746cvv95vvugj77iocsb9rgt4m3h5.apps.googleusercontent.com";
-  const redirectUri = `${window.location.origin}/auth/callback`;
-  const scopes = [
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/gmail.readonly",
-  ].join(" ");
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: scopes,
-    access_type: "offline",
-    prompt: "consent",
-  });
-
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+  // Use the server's endpoint to initiate OAuth flow
+  const authUrl = `/api/auth/${provider}/authorize`;
 
   const width = 600;
   const height = 600;
@@ -94,29 +84,58 @@ export function setupAuthMessageListener(
     provider: string;
     success: boolean;
     tokens?: StoredTokens;
+    jwt?: string;
+    user?: User;
     error?: string;
   }) => void
 ): () => void {
   const handleMessage = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
 
-    const { type, code } = event.data || {};
+    // Handle direct message from the OAuth popup
+    const { type, provider, success, jwt, tokens, error } = event.data || {};
+    if (type === "auth_callback") {
+      if (success && jwt) {
+        // Store JWT token
+        setJwtToken(jwt);
+        
+        // If we have OAuth tokens, store them too
+        if (tokens) {
+          localStorage.setItem("auth_tokens", JSON.stringify(tokens));
+        }
+        
+        callback({
+          type: "auth_callback",
+          provider: provider || "google",
+          success: true,
+          jwt,
+          tokens
+        });
+      } else if (error) {
+        callback({
+          type: "auth_callback",
+          provider: provider || "google",
+          success: false,
+          error
+        });
+      }
+      return;
+    }
+
+    // Handle code from auth-callback.tsx
+    const { code } = event.data || {};
     if (type === "oauth_callback" && code) {
       handleOAuthCallback("google", code)
-        .then((tokens) => {
-          const storedTokens: StoredTokens = {
-            access_token: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-            expiry_date: Date.now() + (tokens.expires_in || 3600) * 1000,
-          };
-
-          localStorage.setItem("auth_tokens", JSON.stringify(storedTokens));
-
+        .then((response) => {
+          // Store JWT token
+          setJwtToken(response.jwt);
+          
           callback({
             type: "auth_callback",
             provider: "google",
             success: true,
-            tokens: storedTokens,
+            jwt: response.jwt,
+            user: response.user
           });
         })
         .catch((error) => {
@@ -144,6 +163,18 @@ export function getStoredTokens(): StoredTokens | null {
   }
 }
 
+export function getJwtToken(): string | null {
+  return localStorage.getItem("jwt_token");
+}
+
+export function setJwtToken(token: string): void {
+  localStorage.setItem("jwt_token", token);
+}
+
+export function clearJwtToken(): void {
+  localStorage.removeItem("jwt_token");
+}
+
 export async function refreshAccessToken(): Promise<StoredTokens | null> {
   const tokens = getStoredTokens();
   if (!tokens?.refresh_token) return null;
@@ -166,4 +197,16 @@ export async function refreshAccessToken(): Promise<StoredTokens | null> {
 
   localStorage.setItem("auth_tokens", JSON.stringify(updated));
   return updated;
+}
+
+// Add JWT token to API requests
+export function addAuthHeader(headers: HeadersInit = {}): HeadersInit {
+  const jwt = getJwtToken();
+  if (jwt) {
+    return {
+      ...headers,
+      Authorization: `Bearer ${jwt}`
+    };
+  }
+  return headers;
 }

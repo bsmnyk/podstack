@@ -1,12 +1,29 @@
 import { google } from 'googleapis';
 import { storage } from './storage';
 import { Request, Response } from 'express';
+import { generateToken } from './jwt';
+import fs from 'fs';
+import path from 'path';
+
+// Load credentials from JSON file
+let credentials: any;
+try {
+  const credentialsPath = path.join(process.cwd(), 'credentials.json');
+  const credentialsFile = fs.readFileSync(credentialsPath, 'utf8');
+  credentials = JSON.parse(credentialsFile).web;
+} catch (error) {
+  console.error('Error loading credentials from JSON file:', error);
+  credentials = {
+    client_id: process.env.VITE_GOOGLE_CLIENT_ID,
+    client_secret: process.env.VITE_GOOGLE_CLIENT_SECRET
+  };
+}
 
 // Initialize OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
-  process.env.VITE_GOOGLE_CLIENT_ID,
-  process.env.VITE_GOOGLE_CLIENT_SECRET,
-  `${process.env.HOST || 'http://localhost:5000'}/api/auth/google/callback`
+  credentials.client_id,
+  credentials.client_secret,
+  `${process.env.HOST || 'http://localhost:5000'}/auth/callback`
 );
 
 // Scopes we want to request for Gmail access
@@ -97,6 +114,19 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     // Create a session for the user
     req.session.userId = user.id;
     
+    // Store the tokens in the database
+    await storage.saveUserToken({
+      userId: user.id,
+      provider: 'google',
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || null,
+      idToken: tokens.id_token || null,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null
+    });
+    
+    // Generate a JWT token for the user
+    const jwtToken = generateToken(user);
+    
     // Create HTML response page that sends a message to the opener
     const successHtml = `
       <!DOCTYPE html>
@@ -118,6 +148,7 @@ export async function handleGoogleCallback(req: Request, res: Response) {
             type: 'auth_callback',
             provider: 'google',
             success: true,
+            jwt: "${jwtToken}",
             tokens: ${JSON.stringify(tokens)}
           }, window.location.origin);
           
@@ -179,21 +210,29 @@ export async function handleTokenExchange(req: Request, res: Response) {
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code);
     
+    if (!tokens.access_token) {
+      return res.status(400).json({ message: 'Failed to get access token' });
+    }
+    
     // Get user information
-    const userInfo = await getUserInfo(tokens.access_token!);
+    const userInfo = await getUserInfo(tokens.access_token);
+    
+    if (!userInfo.email) {
+      return res.status(400).json({ message: 'Failed to get user email' });
+    }
     
     // Look up existing user or create a new one
-    let user = await storage.getUserByEmail(userInfo.email!);
+    let user = await storage.getUserByEmail(userInfo.email);
     
     if (!user) {
       // Create a new user
       user = await storage.createUser({
-        username: userInfo.email!.split('@')[0],
-        email: userInfo.email!,
+        username: userInfo.email.split('@')[0],
+        email: userInfo.email,
         provider: 'google',
-        providerId: userInfo.id!,
-        name: userInfo.name,
-        avatarUrl: userInfo.picture,
+        providerId: userInfo.id || '',
+        name: userInfo.name || '',
+        avatarUrl: userInfo.picture || '',
         password: '', // Not used for OAuth users
       });
     }
@@ -201,8 +240,30 @@ export async function handleTokenExchange(req: Request, res: Response) {
     // Create a session for the user
     req.session.userId = user.id;
     
-    // Return the tokens
-    res.json(tokens);
+    // Store the tokens in the database
+    await storage.saveUserToken({
+      userId: user.id,
+      provider: 'google',
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || null,
+      idToken: tokens.id_token || null,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null
+    });
+    
+    // Generate a JWT token for the user
+    const jwtToken = generateToken(user);
+    
+    // Return the JWT token and user info
+    res.json({
+      jwt: jwtToken,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl
+      }
+    });
   } catch (error) {
     console.error('Token exchange error:', error);
     res.status(500).json({ message: 'Failed to exchange code for tokens' });

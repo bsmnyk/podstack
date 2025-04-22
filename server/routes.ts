@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { setupAuthRoutes } from "./auth";
 import { z } from "zod";
 import { insertCategorySchema, insertNewsletterSchema, insertUserNewsletterSchema } from "@shared/schema";
-import { getAuthUrl, handleGoogleCallback, fetchGmailEmails } from "./googleAuth";
+import { getAuthUrl, handleGoogleCallback, handleTokenExchange, fetchGmailEmails } from "./googleAuth";
+import { authMiddleware, googleAuthMiddleware } from "./middleware";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
@@ -16,26 +17,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.redirect(authUrl);
   });
 
-  app.get("/api/auth/google/callback", handleGoogleCallback);
+  app.get("/auth/callback", handleGoogleCallback);
 
-  // app.post("/api/auth/google/exchange", handleTokenExchange);
+  app.post("/api/auth/google/exchange", handleTokenExchange);
 
   // Gmail API routes
-  app.get("/api/gmail/messages", async (req, res) => {
+  app.get("/api/gmail/messages", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
     try {
-      if (!req.session.userId) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-
-      const accessToken = req.headers.authorization?.split(" ")[1];
-      if (!accessToken) {
-        return res.status(401).json({ message: "Access token required" });
-      }
-
       const query = req.query.q as string || "category:primary is:unread label:newsletter";
       const maxResults = req.query.maxResults ? parseInt(req.query.maxResults as string) : 10;
 
-      const emails = await fetchGmailEmails(accessToken, query, maxResults);
+      const emails = await fetchGmailEmails(req.googleToken.accessToken, query, maxResults);
       res.json(emails);
     } catch (error) {
       console.error("Error fetching Gmail messages:", error);
@@ -157,25 +149,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User's saved newsletters
-  app.get("/api/user/newsletters", async (req, res) => {
+  app.get("/api/user/newsletters", authMiddleware, async (req: any, res) => {
     try {
-      if (!req.session.userId) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-
-      const userNewsletters = await storage.getUserNewsletters(req.session.userId);
+      const userNewsletters = await storage.getUserNewsletters(req.user.id);
       res.json(userNewsletters);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user's newsletters" });
     }
   });
 
-  app.post("/api/user/newsletters", async (req, res) => {
+  app.post("/api/user/newsletters", authMiddleware, async (req: any, res) => {
     try {
-      if (!req.session.userId) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-
       const parseResult = z.object({ newsletterId: z.number() }).safeParse(req.body);
       if (!parseResult.success) {
         return res.status(400).json({ message: "Invalid data", errors: parseResult.error.errors });
@@ -190,14 +174,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if already saved
-      const existing = await storage.getUserNewsletterByIds(req.session.userId, newsletterId);
+      const existing = await storage.getUserNewsletterByIds(req.user.id, newsletterId);
       if (existing) {
         return res.status(409).json({ message: "Newsletter already saved" });
       }
 
       // Save newsletter
       const userNewsletter = await storage.saveNewsletterForUser({
-        userId: req.session.userId,
+        userId: req.user.id,
         newsletterId,
       });
 
@@ -207,24 +191,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/user/newsletters/:newsletterId", async (req, res) => {
+  app.delete("/api/user/newsletters/:newsletterId", authMiddleware, async (req: any, res) => {
     try {
-      if (!req.session.userId) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-
       const newsletterId = parseInt(req.params.newsletterId);
       if (isNaN(newsletterId)) {
         return res.status(400).json({ message: "Invalid newsletter ID" });
       }
 
       // Check if exists first
-      const existing = await storage.getUserNewsletterByIds(req.session.userId, newsletterId);
+      const existing = await storage.getUserNewsletterByIds(req.user.id, newsletterId);
       if (!existing) {
         return res.status(404).json({ message: "Saved newsletter not found" });
       }
 
-      await storage.removeNewsletterForUser(req.session.userId, newsletterId);
+      await storage.removeNewsletterForUser(req.user.id, newsletterId);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to remove newsletter" });

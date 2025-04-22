@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { getMe, logout as logoutApi, redirectToOAuthProvider, setupAuthMessageListener } from "@/lib/auth";
+import { getMe, logout as logoutApi, redirectToOAuthProvider, setupAuthMessageListener, getJwtToken, setJwtToken, clearJwtToken } from "@/lib/auth";
 import { LoginModal } from "@/components/login-modal";
 import { User } from "@shared/schema";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,9 +12,8 @@ interface AuthContextType {
     refresh_token?: string;
     expiry_date?: number;
   } | null;
+  jwt: string | null;
   loginWithGoogle: () => Promise<void>;
-  loginWithFacebook: () => Promise<void>;
-  loginWithTwitter: () => Promise<void>;
   logout: () => Promise<void>;
   showLoginModal: () => void;
   hideLoginModal: () => void;
@@ -24,9 +23,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isAuthenticating: false,
   tokens: null,
+  jwt: null,
   loginWithGoogle: async () => {},
-  loginWithFacebook: async () => {},
-  loginWithTwitter: async () => {},
   logout: async () => {},
   showLoginModal: () => {},
   hideLoginModal: () => {},
@@ -58,6 +56,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [jwt, setJwt] = useState<string | null>(getJwtToken());
   const queryClient = useQueryClient();
 
   // Fetch user on initial load
@@ -86,15 +85,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const cleanup = setupAuthMessageListener(async (data) => {
       if (data.success) {
-        // If we have tokens in the message, store them
+        // If we have a JWT token in the message, store it
+        if (data.jwt) {
+          console.log("Received JWT token from OAuth callback");
+          setJwt(data.jwt);
+        }
+        
+        // If we have OAuth tokens in the message, store them
         if (data.tokens) {
-          console.log("Received tokens from OAuth callback");
+          console.log("Received OAuth tokens from OAuth callback");
           
           // Save tokens in state for API requests
           setTokens({
             access_token: data.tokens.access_token,
             refresh_token: data.tokens.refresh_token,
-            expiry_date: Date.now() + (data.tokens.expires_in || 3600) * 1000
+            expiry_date: data.tokens.expiry_date || Date.now() + 3600 * 1000
           });
           
           // Set up Google API client with these tokens
@@ -103,9 +108,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         }
         
-        // Refresh user data after successful login
-        const userData = await getMe();
-        setUser(userData);
+        // If we have user data, use it
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          // Otherwise refresh user data after successful login
+          try {
+            const userData = await getMe();
+            setUser(userData);
+          } catch (error) {
+            console.error("Error fetching user data:", error);
+          }
+        }
+        
         hideLoginModal();
         setIsAuthenticating(false);
         
@@ -120,16 +135,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return cleanup;
   }, [queryClient]);
 
-  const loginWithProvider = async (provider: string) => {
-    setIsAuthenticating(true);
-    try {
-      redirectToOAuthProvider(provider);
-    } catch (error) {
-      setIsAuthenticating(false);
-      console.error(`${provider} login error:`, error);
-    }
-  };
-
   const loginWithGoogle = async () => {
     setIsAuthenticating(true);
     try {
@@ -140,19 +145,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const loginWithFacebook = async () => {
-    return loginWithProvider("facebook");
-  };
-
-  const loginWithTwitter = async () => {
-    return loginWithProvider("twitter");
-  };
-
   const logout = async () => {
     setIsAuthenticating(true);
     try {
       await logoutApi();
       setUser(null);
+      setJwt(null);
+      clearJwtToken();
+      clearCredentials();
       // Invalidate any user-related queries
       queryClient.invalidateQueries();
     } catch (error) {
@@ -176,9 +176,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user,
         isAuthenticating,
         tokens,
+        jwt,
         loginWithGoogle,
-        loginWithFacebook,
-        loginWithTwitter,
         logout,
         showLoginModal,
         hideLoginModal,

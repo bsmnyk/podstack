@@ -6,6 +6,8 @@ import { z } from "zod";
 import { storage } from "./storage";
 import { insertUserSchema } from "@shared/schema";
 import crypto from "crypto";
+import { generateToken } from "./jwt";
+import { authMiddleware } from "./middleware";
 
 declare module "express-session" {
   interface SessionData {
@@ -14,7 +16,7 @@ declare module "express-session" {
 }
 
 // Setup session storage for production
-let sessionStore;
+let sessionStore: session.Store;
 if (process.env.NODE_ENV === "production") {
   const MemoryStore = require("memorystore")(session);
   sessionStore = new MemoryStore({
@@ -106,10 +108,16 @@ export function setupAuthRoutes(app: Express) {
 
       // Log user in (create session)
       req.session.userId = newUser.id;
+      
+      // Generate JWT token
+      const jwtToken = generateToken(newUser);
 
-      // Return user data (exclude password)
+      // Return user data and JWT token
       const { password: _, ...userData } = newUser;
-      res.status(201).json(userData);
+      res.status(201).json({
+        jwt: jwtToken,
+        user: userData
+      });
     } catch (error) {
       res.status(500).json({ message: "Registration failed" });
     }
@@ -123,10 +131,16 @@ export function setupAuthRoutes(app: Express) {
 
       // Log user in (create session)
       req.session.userId = user.id;
+      
+      // Generate JWT token
+      const jwtToken = generateToken(user);
 
-      // Return user data (exclude password)
+      // Return user data and JWT token
       const { password, ...userData } = user;
-      res.json(userData);
+      res.json({
+        jwt: jwtToken,
+        user: userData
+      });
     })(req, res, next);
   });
 
@@ -141,7 +155,7 @@ export function setupAuthRoutes(app: Express) {
     });
   });
 
-  // Get current user
+  // Get current user (session-based)
   app.get("/api/auth/me", (req, res) => {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Not authenticated" });
@@ -162,78 +176,74 @@ export function setupAuthRoutes(app: Express) {
         res.status(500).json({ message: "Failed to get user data" });
       });
   });
+  
+  // Get current user (JWT-based)
+  app.get("/api/auth/user", authMiddleware, (req: any, res) => {
+    try {
+      // User is already attached to the request by the authMiddleware
+      const { password, ...userData } = req.user;
+      res.json(userData);
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      res.status(500).json({ message: "Failed to get user data" });
+    }
+  });
 
-  // Mock OAuth routes for demonstration purposes
-  // In a real app, these would use actual OAuth providers
+  // Mock OAuth route for demonstration purposes
+  // In a real app, this would use the actual OAuth provider
 
   // Google OAuth
-  app.get("/api/auth/google/authorize", (req, res) => {
-    // In a real app, redirect to Google's OAuth URL
-    // For demo, simulate the OAuth flow
-    const state = crypto.randomBytes(16).toString("hex");
-    res.redirect(`/api/auth/oauth-callback?provider=google&state=${state}`);
-  });
-
-  // Facebook OAuth
-  app.get("/api/auth/facebook/authorize", (req, res) => {
-    // In a real app, redirect to Facebook's OAuth URL
-    // For demo, simulate the OAuth flow
-    const state = crypto.randomBytes(16).toString("hex");
-    res.redirect(`/api/auth/oauth-callback?provider=facebook&state=${state}`);
-  });
-
-  // Twitter OAuth
-  app.get("/api/auth/twitter/authorize", (req, res) => {
-    // In a real app, redirect to Twitter's OAuth URL
-    // For demo, simulate the OAuth flow
-    const state = crypto.randomBytes(16).toString("hex");
-    res.redirect(`/api/auth/oauth-callback?provider=twitter&state=${state}`);
-  });
+  // app.get("/api/auth/google/authorize", (req, res) => {
+  //   // In a real app, redirect to Google's OAuth URL
+  //   // For demo, simulate the OAuth flow
+  //   const state = crypto.randomBytes(16).toString("hex");
+  //   res.redirect(`/api/auth/oauth-callback?provider=google&state=${state}`);
+  // });
 
   // OAuth callback page that sends a message to the opener window
-  app.get("/api/auth/oauth-callback", (req, res) => {
-    const provider = req.query.provider as string;
+  // app.get("/api/auth/oauth-callback", (req, res) => {
+  //   const provider = req.query.provider as string;
     
-    // In a real app, this would validate the code and exchange it for tokens
-    // For demo, create a mock user based on the provider
+  //   // In a real app, this would validate the code and exchange it for tokens
+  //   // For demo, create a mock user based on the provider
     
-    const callbackHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>OAuth Callback</title>
-      </head>
-      <body>
-        <h1>Authenticating with ${provider}...</h1>
-        <script>
-          // Send auth result to parent window and close this one
-          window.opener.postMessage({
-            type: "auth_callback",
-            provider: "${provider}",
-            success: true
-          }, window.location.origin);
+  //   const callbackHtml = `
+  //     <!DOCTYPE html>
+  //     <html>
+  //     <head>
+  //       <title>OAuth Callback</title>
+  //     </head>
+  //     <body>
+  //       <h1>Authenticating with ${provider}...</h1>
+  //       <script>
+  //         // Send auth result to parent window and close this one
+  //         window.opener.postMessage({
+  //           type: "auth_callback",
+  //           provider: "${provider}",
+  //           success: true
+  //         }, window.location.origin);
           
-          // Create a simulated user in the parent window
-          window.opener.postMessage({
-            type: "demo_user",
-            user: {
-              id: ${Math.floor(Math.random() * 1000)},
-              username: "user_${provider}_${Date.now()}",
-              email: "user@${provider}.com",
-              name: "Demo User",
-              avatarUrl: "https://ui-avatars.com/api/?name=Demo+User&background=random"
-            }
-          }, window.location.origin);
+  //         // Create a simulated user in the parent window
+  //         window.opener.postMessage({
+  //           type: "demo_user",
+  //           user: {
+  //             id: ${Math.floor(Math.random() * 1000)},
+  //             username: "user_${provider}_${Date.now()}",
+  //             email: "user@${provider}.com",
+  //             name: "Demo User",
+  //             avatarUrl: "https://ui-avatars.com/api/?name=Demo+User&background=random"
+  //           }
+  //         }, window.location.origin);
           
-          // Close this window
-          setTimeout(() => window.close(), 1000);
-        </script>
-      </body>
-      </html>
-    `;
+  //         // Close this window
+  //         setTimeout(() => window.close(), 1000);
+  //       </script>
+  //     </body>
+  //     </html>
+  //   `;
     
-    res.send(callbackHtml);
-  });
+  //   res.send(callbackHtml);
+  // });
 
   // OAuth callback API for token exchange
   app.post("/api/auth/:provider/callback", async (req, res) => {
@@ -245,6 +255,11 @@ export function setupAuthRoutes(app: Express) {
       
       if (!code) {
         return res.status(400).json({ message: "Missing authorization code" });
+      }
+      
+      // Only allow Google provider
+      if (provider !== 'google') {
+        return res.status(400).json({ message: "Unsupported OAuth provider" });
       }
       
       // Simulate creating/retrieving a user
@@ -270,13 +285,24 @@ export function setupAuthRoutes(app: Express) {
       // Log user in (create session)
       req.session.userId = user.id;
       
-      // Return mock tokens (in a real app, these would be actual OAuth tokens)
-      res.json({
+      // Generate JWT token
+      const jwtToken = generateToken(user);
+      
+      // Mock OAuth tokens (in a real app, these would be actual OAuth tokens)
+      const oauthTokens = {
         access_token: `mock_access_token_${Date.now()}`,
         id_token: `mock_id_token_${Date.now()}`,
         refresh_token: `mock_refresh_token_${Date.now()}`,
         expires_in: 3600,
         token_type: "Bearer"
+      };
+      
+      // Return JWT token, user data, and OAuth tokens
+      const { password, ...userData } = user;
+      res.json({
+        jwt: jwtToken,
+        user: userData,
+        ...oauthTokens
       });
     } catch (error) {
       res.status(500).json({ message: "Authentication failed" });

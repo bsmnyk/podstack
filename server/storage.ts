@@ -6,7 +6,9 @@ import {
   type Newsletter, 
   type InsertNewsletter, 
   type UserNewsletter, 
-  type InsertUserNewsletter 
+  type InsertUserNewsletter,
+  type UserToken,
+  type InsertUserToken
 } from "@shared/schema";
 
 interface QueryOptions {
@@ -25,6 +27,13 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, userData: Partial<User>): Promise<User | undefined>;
   
+  // User Token methods
+  getUserTokens(userId: number): Promise<UserToken[]>;
+  getUserTokenByProvider(userId: number, provider: string): Promise<UserToken | undefined>;
+  saveUserToken(token: InsertUserToken): Promise<UserToken>;
+  updateUserToken(id: number, tokenData: Partial<UserToken>): Promise<UserToken | undefined>;
+  deleteUserToken(id: number): Promise<void>;
+  
   // Category methods
   getCategoryById(id: number): Promise<Category | undefined>;
   getCategoryByName(name: string): Promise<Category | undefined>;
@@ -39,7 +48,7 @@ export interface IStorage {
   createNewsletter(newsletter: InsertNewsletter): Promise<Newsletter>;
   
   // User Newsletter methods
-  getUserNewsletters(userId: number): Promise<{ newsletter: Newsletter; savedAt: string }[]>;
+  getUserNewsletters(userId: number): Promise<{ newsletter: Newsletter; savedAt: Date }[]>;
   getUserNewsletterByIds(userId: number, newsletterId: number): Promise<UserNewsletter | undefined>;
   saveNewsletterForUser(data: InsertUserNewsletter): Promise<UserNewsletter>;
   removeNewsletterForUser(userId: number, newsletterId: number): Promise<void>;
@@ -48,17 +57,20 @@ export interface IStorage {
 // In-memory storage implementation
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
+  private userTokens: Map<number, UserToken>;
   private categories: Map<number, Category>;
   private newsletters: Map<number, Newsletter>;
   private userNewsletters: Map<string, UserNewsletter>;
   
   private userId: number = 1;
+  private userTokenId: number = 1;
   private categoryId: number = 1;
   private newsletterId: number = 1;
   private userNewsletterId: number = 1;
   
   constructor() {
     this.users = new Map();
+    this.userTokens = new Map();
     this.categories = new Map();
     this.newsletters = new Map();
     this.userNewsletters = new Map();
@@ -89,7 +101,15 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userId++;
     const now = new Date();
-    const user: User = { ...insertUser, id, createdAt: now.toISOString() };
+    const user: User = { 
+      ...insertUser, 
+      id, 
+      createdAt: now,
+      name: insertUser.name || null,
+      avatarUrl: insertUser.avatarUrl || null,
+      provider: insertUser.provider || null,
+      providerId: insertUser.providerId || null
+    };
     this.users.set(id, user);
     return user;
   }
@@ -101,6 +121,74 @@ export class MemStorage implements IStorage {
     const updatedUser = { ...user, ...userData };
     this.users.set(id, updatedUser);
     return updatedUser;
+  }
+  
+  // User Token methods
+  async getUserTokens(userId: number): Promise<UserToken[]> {
+    return Array.from(this.userTokens.values()).filter(
+      (token) => token.userId === userId
+    );
+  }
+  
+  async getUserTokenByProvider(userId: number, provider: string): Promise<UserToken | undefined> {
+    return Array.from(this.userTokens.values()).find(
+      (token) => token.userId === userId && token.provider === provider
+    );
+  }
+  
+  async saveUserToken(insertToken: InsertUserToken): Promise<UserToken> {
+    const id = this.userTokenId++;
+    const now = new Date();
+    
+    // Check if token already exists for this user and provider
+    const existingToken = await this.getUserTokenByProvider(
+      insertToken.userId,
+      insertToken.provider
+    );
+    
+    if (existingToken) {
+      // Update existing token
+      const updatedToken: UserToken = {
+        ...existingToken,
+        ...insertToken,
+        updatedAt: now
+      };
+      this.userTokens.set(existingToken.id, updatedToken);
+      return updatedToken;
+    }
+    
+    // Create new token
+    const userToken: UserToken = {
+      ...insertToken,
+      id,
+      createdAt: now,
+      updatedAt: now,
+      refreshToken: insertToken.refreshToken || null,
+      idToken: insertToken.idToken || null,
+      expiresAt: insertToken.expiresAt || null
+    };
+    
+    this.userTokens.set(id, userToken);
+    return userToken;
+  }
+  
+  async updateUserToken(id: number, tokenData: Partial<UserToken>): Promise<UserToken | undefined> {
+    const token = this.userTokens.get(id);
+    if (!token) return undefined;
+    
+    const now = new Date();
+    const updatedToken = { 
+      ...token, 
+      ...tokenData,
+      updatedAt: now
+    };
+    
+    this.userTokens.set(id, updatedToken);
+    return updatedToken;
+  }
+  
+  async deleteUserToken(id: number): Promise<void> {
+    this.userTokens.delete(id);
   }
   
   // Category methods
@@ -118,7 +206,11 @@ export class MemStorage implements IStorage {
   
   async createCategory(category: InsertCategory): Promise<Category> {
     const id = this.categoryId++;
-    const newCategory: Category = { ...category, id };
+    const newCategory: Category = { 
+      ...category, 
+      id,
+      description: category.description || null
+    };
     this.categories.set(id, newCategory);
     return newCategory;
   }
@@ -225,14 +317,15 @@ export class MemStorage implements IStorage {
     const newNewsletter: Newsletter = { 
       ...newsletter, 
       id, 
-      publishedAt: newsletter.publishedAt || now.toISOString()
+      publishedAt: newsletter.publishedAt || now,
+      featured: newsletter.featured || false
     };
     this.newsletters.set(id, newNewsletter);
     return newNewsletter;
   }
   
   // User Newsletter methods
-  async getUserNewsletters(userId: number): Promise<{ newsletter: Newsletter; savedAt: string }[]> {
+  async getUserNewsletters(userId: number): Promise<{ newsletter: Newsletter; savedAt: Date }[]> {
     const userNewsletters = Array.from(this.userNewsletters.values()).filter(
       (un) => un.userId === userId
     );
@@ -244,7 +337,7 @@ export class MemStorage implements IStorage {
       }
       return {
         newsletter,
-        savedAt: un.savedAt,
+        savedAt: un.savedAt
       };
     });
   }
@@ -261,7 +354,7 @@ export class MemStorage implements IStorage {
     const userNewsletter: UserNewsletter = {
       ...data,
       id,
-      savedAt: now.toISOString(),
+      savedAt: now
     };
     
     const key = `${data.userId}-${data.newsletterId}`;
@@ -286,7 +379,11 @@ export class MemStorage implements IStorage {
     ];
     
     const categories: Category[] = categoryData.map(cat => {
-      const category: Category = { ...cat, id: this.categoryId++ };
+      const category: Category = { 
+        ...cat, 
+        id: this.categoryId++,
+        description: cat.description || null
+      };
       this.categories.set(category.id, category);
       return category;
     });
@@ -389,7 +486,7 @@ export class MemStorage implements IStorage {
         audioUrl: data.audioUrl,
         duration: data.duration,
         categoryId,
-        publishedAt: publishDate.toISOString(),
+        publishedAt: publishDate,
         featured: data.featured || false
       };
       

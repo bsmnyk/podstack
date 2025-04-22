@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useState } from "react";
 
 export default function Settings() {
-  const { user, logout, isAuthenticating } = useAuth();
+  const { user, logout, showLoginModal, isAuthenticating } = useAuth();
   const { theme, setTheme } = useTheme();
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -31,7 +31,7 @@ export default function Settings() {
           <CardContent>
             <Button 
               className="w-full" 
-              onClick={() => {}}
+              onClick={showLoginModal}
             >
               Sign In
             </Button>

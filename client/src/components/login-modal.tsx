@@ -8,21 +8,11 @@ type LoginModalProps = {
 };
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const { loginWithGoogle, loginWithFacebook, loginWithTwitter, isAuthenticating } = useAuth();
+  const { loginWithGoogle, isAuthenticating } = useAuth();
 
-  const handleLogin = async (provider: string) => {
+  const handleLogin = async () => {
     try {
-      switch (provider) {
-        case 'google':
-          await loginWithGoogle();
-          break;
-        case 'facebook':
-          await loginWithFacebook();
-          break;
-        case 'twitter':
-          await loginWithTwitter();
-          break;
-      }
+      await loginWithGoogle();
       onClose();
     } catch (error) {
       console.error("Login error:", error);
@@ -43,7 +33,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
           <Button 
             variant="outline" 
             className="w-full flex items-center justify-center gap-3 py-6"
-            onClick={() => handleLogin('google')}
+            onClick={handleLogin}
             disabled={isAuthenticating}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

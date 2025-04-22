@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -51,6 +51,27 @@ export const insertNewsletterSchema = createInsertSchema(newsletters).omit({
   id: true,
 });
 
+// User OAuth tokens
+export const userTokens = pgTable("user_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  provider: text("provider").notNull(), // 'google', 'facebook', 'twitter'
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUserTokenSchema = createInsertSchema(userTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // User favorites/saved newsletters
 export const userNewsletters = pgTable("user_newsletters", {
   id: serial("id").primaryKey(),
@@ -77,6 +98,9 @@ export type InsertCategory = z.infer<typeof insertCategorySchema>;
 
 export type Newsletter = typeof newsletters.$inferSelect;
 export type InsertNewsletter = z.infer<typeof insertNewsletterSchema>;
+
+export type UserToken = typeof userTokens.$inferSelect;
+export type InsertUserToken = z.infer<typeof insertUserTokenSchema>;
 
 export type UserNewsletter = typeof userNewsletters.$inferSelect;
 export type InsertUserNewsletter = z.infer<typeof insertUserNewsletterSchema>;
