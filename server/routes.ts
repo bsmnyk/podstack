@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuthRoutes } from "./auth";
 import { z } from "zod";
 import { insertCategorySchema, insertNewsletterSchema, insertUserNewsletterSchema } from "@shared/schema";
-import { getAuthUrl, handleGoogleCallback, handleTokenExchange, fetchGmailEmails } from "./googleAuth";
+import { getAuthUrl, handleGoogleCallback, fetchGmailEmails } from "./googleAuth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
@@ -18,7 +18,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/google/callback", handleGoogleCallback);
 
-  app.post("/api/auth/google/exchange", handleTokenExchange);
+  // app.post("/api/auth/google/exchange", handleTokenExchange);
 
   // Gmail API routes
   app.get("/api/gmail/messages", async (req, res) => {

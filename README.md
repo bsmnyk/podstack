@@ -1,5 +1,5 @@
 
-# Newslettr - Podcast-Style Newsletter App
+# PodStack - Podcast-Style Newsletter App
 
 A modern web application that transforms newsletters into an audio experience, allowing users to listen to their favorite newsletters in podcast format.
 

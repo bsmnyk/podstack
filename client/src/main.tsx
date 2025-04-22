@@ -16,7 +16,7 @@ document.head.appendChild(fontLink);
 
 // Add title
 const title = document.createElement("title");
-title.textContent = "Newslettr - Podcast-Style Newsletter App";
+title.textContent = "PodStack - Podcast-Style Newsletter App";
 document.head.appendChild(title);
 
 // Add CSS for audio progress bar

@@ -36,7 +36,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-white">
           <span className="material-icons text-sm">podcasts</span>
         </div>
-        <span className="ml-2 font-semibold text-lg dark:text-white">Newslettr</span>
+        <span className="ml-2 font-semibold text-lg dark:text-white">PodStack</span>
         <button 
           className="ml-auto lg:hidden text-gray-500 dark:text-gray-400" 
           onClick={onClose}

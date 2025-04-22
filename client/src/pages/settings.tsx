@@ -205,10 +205,10 @@ export default function Settings() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Newslettr v1.0.0
+            PodStack v1.0.0
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            © 2023 Newslettr. All rights reserved.
+            © 2023 PodStack. All rights reserved.
           </p>
         </CardContent>
       </Card>

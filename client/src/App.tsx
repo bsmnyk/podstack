@@ -19,8 +19,6 @@ import AuthCallback from "@/pages/auth-callback";
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -72,10 +70,7 @@ function Router() {
         <AudioPlayer />
       </main>
 
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-      />
+      
     </div>
   );
 }

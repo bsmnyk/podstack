@@ -29,7 +29,7 @@ export function setupAuthRoutes(app: Express) {
   // Session middleware
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "newslettr-app-secret",
+      secret: process.env.SESSION_SECRET || "podstack-app-secret",
       resave: false,
       saveUninitialized: false,
       store: sessionStore,
