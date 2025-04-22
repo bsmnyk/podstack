@@ -39,8 +39,8 @@ A modern web application that transforms newsletters into an audio experience, a
    ```
 3. Set up environment variables:
    - `DATABASE_URL`: PostgreSQL connection URL
-   - `SESSION_SECRET`: Secret for session management
-   - `VITE_GOOGLE_CLIENT_ID`: Google OAuth client ID
+   - `JWT_SECRET`: Secret for session management
+   - `GOOGLE_CLIENT_ID`: Google OAuth client ID
    - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
 
 4. Start the development server:

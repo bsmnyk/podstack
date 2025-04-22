@@ -14,8 +14,8 @@ try {
 } catch (error) {
   console.error('Error loading credentials from JSON file:', error);
   credentials = {
-    client_id: process.env.VITE_GOOGLE_CLIENT_ID,
-    client_secret: process.env.VITE_GOOGLE_CLIENT_SECRET
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET
   };
 }
 
