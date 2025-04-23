@@ -120,6 +120,27 @@ export const insertUserNewsletterSenderSchema = createInsertSchema(userNewslette
   subscribedAt: true,
 });
 
+// Subscribed Newsletters schema
+export const subscribedNewsletters = pgTable("subscribed_newsletters", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  senderEmail: text("sender_email").notNull(),
+  subject: text("subject").notNull(),
+  from: text("from").notNull(),
+  date: text("date").notNull(),
+  plainText: text("plain_text"),
+  markdown: text("markdown"),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+});
+
+export const insertSubscribedNewsletterSchema = createInsertSchema(subscribedNewsletters).omit({
+  id: true,
+  receivedAt: true,
+});
+
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -142,3 +163,15 @@ export type InsertNewsletterSender = z.infer<typeof insertNewsletterSenderSchema
 
 export type UserNewsletterSender = typeof userNewsletterSenders.$inferSelect;
 export type InsertUserNewsletterSender = z.infer<typeof insertUserNewsletterSenderSchema>;
+
+export type SubscribedNewsletter = typeof subscribedNewsletters.$inferSelect;
+export type InsertSubscribedNewsletter = z.infer<typeof insertSubscribedNewsletterSchema>;
+
+// Additional type for newsletter content from EmailService
+export interface NewsletterContent {
+  subject: string;
+  from: string;
+  date: string;
+  plain_text?: string;
+  markdown?: string;
+}

@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { CategoryList } from "@/components/category-list";
 import { NewsletterCard } from "@/components/newsletter-card";
 import { NewsletterListItem } from "@/components/newsletter-list-item";
+import { SubscribedNewsletterList } from "@/components/subscribed-newsletter-list";
 import { Newsletter } from "@shared/schema";
 import { useAuth } from "@/context/auth-context";
 
@@ -68,6 +69,13 @@ export default function Home() {
         onSelectCategory={setSelectedCategoryId} 
         selectedCategoryId={selectedCategoryId} 
       />
+      
+      {/* Subscribed Newsletters section */}
+      {user && (
+        <div className="mb-6">
+          <SubscribedNewsletterList />
+        </div>
+      )}
       
       {/* Featured Newsletters section */}
       <div className="mb-6">

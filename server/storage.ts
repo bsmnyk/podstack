@@ -12,7 +12,10 @@ import {
   type NewsletterSender,
   type InsertNewsletterSender,
   type UserNewsletterSender,
-  type InsertUserNewsletterSender
+  type InsertUserNewsletterSender,
+  type SubscribedNewsletter,
+  type InsertSubscribedNewsletter,
+  type NewsletterContent
 } from "@shared/schema";
 
 interface QueryOptions {
@@ -67,6 +70,14 @@ export interface IStorage {
   saveUserNewsletterSender(data: InsertUserNewsletterSender): Promise<UserNewsletterSender>;
   updateUserNewsletterSender(userId: number, senderEmail: string, subscribed: boolean): Promise<UserNewsletterSender | undefined>;
   getUserNewsletterSender(userId: number, senderEmail: string): Promise<UserNewsletterSender | undefined>;
+  
+  // Subscribed Newsletter methods
+  getSubscribedNewsletters(userId: number, options?: { limit?: number; offset?: number }): Promise<SubscribedNewsletter[]>;
+  getSubscribedNewslettersBySender(userId: number, senderEmail: string): Promise<SubscribedNewsletter[]>;
+  saveSubscribedNewsletter(data: InsertSubscribedNewsletter): Promise<SubscribedNewsletter>;
+  markSubscribedNewsletterAsRead(id: number): Promise<SubscribedNewsletter | undefined>;
+  deleteSubscribedNewsletter(id: number): Promise<void>;
+  getSubscribedNewsletterById(id: number): Promise<SubscribedNewsletter | undefined>;
 
   // First-time login detection
   isFirstTimeLogin(userId: number): Promise<boolean>;
@@ -81,6 +92,7 @@ export class MemStorage implements IStorage {
   private userNewsletters: Map<string, UserNewsletter>;
   private newsletterSenders: Map<number, NewsletterSender>;
   private userNewsletterSenders: Map<string, UserNewsletterSender>;
+  private subscribedNewsletters: Map<number, SubscribedNewsletter>;
 
   private userId: number = 1;
   private userTokenId: number = 1;
@@ -89,6 +101,7 @@ export class MemStorage implements IStorage {
   private userNewsletterId: number = 1;
   private newsletterSenderId: number = 1;
   private userNewsletterSenderId: number = 1;
+  private subscribedNewsletterId: number = 1;
 
   constructor() {
     this.users = new Map();
@@ -98,6 +111,7 @@ export class MemStorage implements IStorage {
     this.userNewsletters = new Map();
     this.newsletterSenders = new Map();
     this.userNewsletterSenders = new Map();
+    this.subscribedNewsletters = new Map();
 
     // Initialize with sample data
     this.initSampleData();
@@ -452,6 +466,63 @@ export class MemStorage implements IStorage {
     return this.userNewsletterSenders.get(key);
   }
 
+  // Subscribed Newsletter methods
+  async getSubscribedNewsletters(userId: number, options: { limit?: number; offset?: number } = {}): Promise<SubscribedNewsletter[]> {
+    let newsletters = Array.from(this.subscribedNewsletters.values())
+      .filter(newsletter => newsletter.userId === userId)
+      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+    
+    if (options.offset) {
+      newsletters = newsletters.slice(options.offset);
+    }
+    
+    if (options.limit) {
+      newsletters = newsletters.slice(0, options.limit);
+    }
+    
+    return newsletters;
+  }
+  
+  async getSubscribedNewslettersBySender(userId: number, senderEmail: string): Promise<SubscribedNewsletter[]> {
+    return Array.from(this.subscribedNewsletters.values())
+      .filter(newsletter => newsletter.userId === userId && newsletter.senderEmail === senderEmail)
+      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+  }
+  
+  async saveSubscribedNewsletter(data: InsertSubscribedNewsletter): Promise<SubscribedNewsletter> {
+    const id = this.subscribedNewsletterId++;
+    const now = new Date();
+    
+    const newsletter: SubscribedNewsletter = {
+      ...data,
+      id,
+      receivedAt: now,
+      isRead: false,
+      plainText: data.plainText || null,
+      markdown: data.markdown || null
+    };
+    
+    this.subscribedNewsletters.set(id, newsletter);
+    return newsletter;
+  }
+  
+  async markSubscribedNewsletterAsRead(id: number): Promise<SubscribedNewsletter | undefined> {
+    const newsletter = this.subscribedNewsletters.get(id);
+    if (!newsletter) return undefined;
+    
+    const updatedNewsletter = { ...newsletter, isRead: true };
+    this.subscribedNewsletters.set(id, updatedNewsletter);
+    return updatedNewsletter;
+  }
+  
+  async deleteSubscribedNewsletter(id: number): Promise<void> {
+    this.subscribedNewsletters.delete(id);
+  }
+  
+  async getSubscribedNewsletterById(id: number): Promise<SubscribedNewsletter | undefined> {
+    return this.subscribedNewsletters.get(id);
+  }
+
   // First-time login detection
   async isFirstTimeLogin(userId: number): Promise<boolean> {
     const userNewsletters = await this.getUserNewsletters(userId);
@@ -552,7 +623,7 @@ export class MemStorage implements IStorage {
         title: "Medical Breakthroughs",
         publisher: "JAMA Network",
         description: "Latest medical research, treatments, and healthcare innovations.",
-        imageUrl: "https://images.unsplash.com/photo-1576671334150-d2d56ebf2b53?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80",
+        imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQpiG4FjCLYm5jBkrlvcSpspbLcIwdavERuvQ&s",
         audioUrl: "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6bf3069.mp3?filename=cinematic-chill-hip-hop-131453.mp3",
         duration: 840, // 14 min
         categoryName: "Health"

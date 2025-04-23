@@ -142,6 +142,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fetch and store newsletters from subscribed senders
+  app.get("/api/user/subscribed-newsletters", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
+    try {
+      // Get user's subscribed senders
+      const subscriptions = await storage.getUserNewsletterSenders(req.user.id);
+      const subscribedSenders = subscriptions.filter(sub => sub.subscribed).map(sub => sub.senderEmail);
+      
+      if (subscribedSenders.length === 0) {
+        return res.json([]);
+      }
+      
+      // Fetch newsletters from subscribed senders
+      const emailService = new EmailService(req.googleToken.accessToken);
+      const newsletters = await emailService.getNewslettersFromSenders(subscribedSenders);
+      
+      // Store newsletters in the database
+      const storedNewsletters = [];
+      for (const newsletter of newsletters) {
+        // Check if newsletter already exists to avoid duplicates
+        const existingNewsletters = await storage.getSubscribedNewslettersBySender(
+          req.user.id, 
+          newsletter.from
+        );
+        
+        const isDuplicate = existingNewsletters.some(
+          existing => existing.subject === newsletter.subject && existing.date === newsletter.date
+        );
+        
+        if (!isDuplicate) {
+          const storedNewsletter = await storage.saveSubscribedNewsletter({
+            userId: req.user.id,
+            senderEmail: newsletter.from,
+            subject: newsletter.subject,
+            from: newsletter.from,
+            date: newsletter.date,
+            plainText: newsletter.plain_text,
+            markdown: newsletter.markdown
+          });
+          
+          storedNewsletters.push(storedNewsletter);
+        }
+      }
+      
+      // Get all subscribed newsletters for the user, including previously stored ones
+      const allNewsletters = await storage.getSubscribedNewsletters(req.user.id, {
+        limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+        offset: req.query.offset ? parseInt(req.query.offset as string) : undefined
+      });
+      
+      res.json(allNewsletters);
+    } catch (error) {
+      console.error("Error fetching subscribed newsletters:", error);
+      res.status(500).json({ message: "Failed to fetch subscribed newsletters" });
+    }
+  });
+
+  // Get a specific subscribed newsletter
+  app.get("/api/user/subscribed-newsletters/:id", authMiddleware, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid newsletter ID" });
+      }
+      
+      const newsletter = await storage.getSubscribedNewsletterById(id);
+      if (!newsletter) {
+        return res.status(404).json({ message: "Newsletter not found" });
+      }
+      
+      // Ensure the user can only access their own newsletters
+      if (newsletter.userId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      res.json(newsletter);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch newsletter" });
+    }
+  });
+  
+  // Mark a subscribed newsletter as read
+  app.put("/api/user/subscribed-newsletters/:id/read", authMiddleware, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid newsletter ID" });
+      }
+      
+      const newsletter = await storage.getSubscribedNewsletterById(id);
+      if (!newsletter) {
+        return res.status(404).json({ message: "Newsletter not found" });
+      }
+      
+      // Ensure the user can only access their own newsletters
+      if (newsletter.userId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const updatedNewsletter = await storage.markSubscribedNewsletterAsRead(id);
+      res.json(updatedNewsletter);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark newsletter as read" });
+    }
+  });
+
 
   // API Routes - prefix all routes with /api
 

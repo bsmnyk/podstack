@@ -57,15 +57,51 @@ export class EmailService {
 
     const content: NewsletterContent = { subject, from, date };
 
-    const parts = message.payload.parts || [];
-    for (const part of parts) {
-      const data = Buffer.from(part.body.data, 'base64').toString('utf-8');
-      if (part.mimeType === 'text/plain') {
+    // Handle different message structures
+    if (message.payload.body && message.payload.body.data) {
+      // Simple message with body directly in payload
+      try {
+        const data = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');
         content.plain_text = data;
-      } else if (part.mimeType === 'text/html') {
         content.markdown = htmlToText.convert(data, { wordwrap: false });
+      } catch (error) {
+        console.error("Error decoding message body:", error);
+      }
+    } else if (message.payload.parts) {
+      // Message with parts
+      const parts = message.payload.parts;
+      for (const part of parts) {
+        if (part.body && part.body.data) {
+          try {
+            const data = Buffer.from(part.body.data, 'base64').toString('utf-8');
+            if (part.mimeType === 'text/plain') {
+              content.plain_text = data;
+            } else if (part.mimeType === 'text/html') {
+              content.markdown = htmlToText.convert(data, { wordwrap: false });
+            }
+          } catch (error) {
+            console.error("Error decoding part body:", error);
+          }
+        } else if (part.parts) {
+          // Handle nested parts (multipart messages)
+          for (const nestedPart of part.parts) {
+            if (nestedPart.body && nestedPart.body.data) {
+              try {
+                const data = Buffer.from(nestedPart.body.data, 'base64').toString('utf-8');
+                if (nestedPart.mimeType === 'text/plain') {
+                  content.plain_text = data;
+                } else if (nestedPart.mimeType === 'text/html') {
+                  content.markdown = htmlToText.convert(data, { wordwrap: false });
+                }
+              } catch (error) {
+                console.error("Error decoding nested part body:", error);
+              }
+            }
+          }
+        }
       }
     }
+    
     return content;
   }
 
@@ -137,7 +173,7 @@ export class EmailService {
     const emailRegex = /^(.*?)(?:<([\w.-]+@[\w.-]+)>)?$/;
   
     const metadataResponses = await Promise.all(
-      messages.map(m => this.gmail.users.messages.get({
+      messages.map((m: any) => this.gmail.users.messages.get({
         userId: 'me',
         id: m.id!,
         format: 'metadata',
@@ -146,7 +182,7 @@ export class EmailService {
     );
   
     for (const res of metadataResponses) {
-      const raw = res.data.payload.headers?.find(h => h.name === 'From')?.value?.trim();
+      const raw = res.data.payload.headers?.find((h: any) => h.name === 'From')?.value?.trim();
       if (!raw) continue;
   
       const match = emailRegex.exec(raw);
