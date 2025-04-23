@@ -13,20 +13,52 @@ type NewsletterSender = {
   emailCount: number;
 };
 
-export function NewsletterSelection() {
+interface NewsletterSelectionProps {
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  subscribedSenders?: NewsletterSender[]; // Add the new prop
+}
+
+export function NewsletterSelection({ isOpen: propIsOpen, onOpenChange: propOnOpenChange, subscribedSenders }: NewsletterSelectionProps) {
   const { user, isFirstLogin, setIsFirstLogin, tokens } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen;
+  const setIsOpen = propOnOpenChange !== undefined ? propOnOpenChange : setInternalIsOpen;
+
   const [senders, setSenders] = useState<NewsletterSender[]>([]);
   const [selectedSenders, setSelectedSenders] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
   useEffect(() => {
     // Open dialog when user is logged in, it's their first login, and tokens are available
-    if (user && isFirstLogin && tokens?.access_token) {
+    // Only trigger this if the component is managing its own state (propOnOpenChange is undefined)
+    if (propOnOpenChange === undefined && user && isFirstLogin && tokens?.access_token) {
       setIsOpen(true);
+      // No need to fetch senders here, useEffect below handles it when isOpen becomes true
+    }
+  }, [user, isFirstLogin, tokens?.access_token, propOnOpenChange]);
+
+  useEffect(() => {
+    // Fetch senders when the dialog opens, regardless of whether it's controlled internally or externally
+    // Only fetch if senders haven't been loaded yet
+    if (isOpen && tokens?.access_token && senders.length === 0) {
       fetchNewsletterSenders();
     }
-  }, [user, isFirstLogin, tokens?.access_token]); // Add tokens?.access_token to dependency array
+  }, [isOpen, tokens?.access_token, senders.length]);
+  
+  // Effect to handle pre-selection when senders or subscribedSenders change
+  useEffect(() => {
+    if (isOpen && senders.length > 0) {
+      if (subscribedSenders && subscribedSenders.length > 0) {
+        // Pre-select only the subscribed senders if provided
+        const subscribedEmails = subscribedSenders.map(sender => sender.email);
+        setSelectedSenders(subscribedEmails);
+      } else {
+        // For first-time users or when opened outside settings, select none by default
+        setSelectedSenders([]);
+      }
+    }
+  }, [isOpen, senders, subscribedSenders]); // Add subscribedSenders to dependency array
   
   const fetchNewsletterSenders = async () => {
     if (!tokens?.access_token) return;
@@ -38,8 +70,7 @@ export function NewsletterSelection() {
         const data = await response.json();
         console.log('senders_data', data);
         setSenders(data);
-        // Pre-select all senders by default
-        setSelectedSenders(data.map((sender: NewsletterSender) => sender.email));
+        // Pre-selection logic is now handled in the separate useEffect
       }
     } catch (error) {
       console.error("Error fetching newsletter senders:", error);

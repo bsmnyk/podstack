@@ -1,13 +1,14 @@
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useTheme } from "@/components/ui/theme-provider";
 import { Switch } from "@/components/ui/switch";
+import { NewsletterSelection } from "@/components/newsletter-selection";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
 type NewsletterSender = {
@@ -22,6 +23,7 @@ type NewsletterSender = {
 export default function Settings() {
   const { user, logout, showLoginModal, isAuthenticating } = useAuth();
   const { theme, setTheme } = useTheme();
+  const [isNewsletterModalOpen, setIsNewsletterModalOpen] = useState(false);
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
@@ -43,7 +45,16 @@ export default function Settings() {
       const response = await apiRequest("GET", "/api/user/newsletter-senders");
       if (response.ok) {
         const data = await response.json();
-        setNewsletterSenders(data);
+        // Transform the data to match the NewsletterSender type
+        const transformedData = data.map((item: any) => ({
+          id: item.id,
+          name: item.name || item.senderEmail.split('@')[0], // Use senderEmail if name is not available
+          email: item.senderEmail, // Map senderEmail to email
+          domain: item.domain || item.senderEmail.split('@')[1], // Extract domain from email if not available
+          emailCount: item.emailCount || 0,
+          subscribed: item.subscribed
+        }));
+        setNewsletterSenders(transformedData);
       }
     } catch (error) {
       console.error("Error fetching newsletter subscriptions:", error);
@@ -158,7 +169,7 @@ export default function Settings() {
                     variant="outline"
                     size="sm"
                     className="mt-2"
-                    onClick={() => {/* Open newsletter selection dialog */}}
+                    onClick={() => setIsNewsletterModalOpen(true)}
                   >
                     Add Newsletters
                   </Button>
@@ -181,7 +192,7 @@ export default function Settings() {
               <Button
                 variant="outline"
                 className="w-full mt-4"
-                onClick={() => {/* Open newsletter selection dialog */}}
+                onClick={() => setIsNewsletterModalOpen(true)}
               >
                 Manage Newsletter Subscriptions
               </Button>
@@ -319,6 +330,11 @@ export default function Settings() {
           </p>
         </CardContent>
       </Card>
+      <NewsletterSelection 
+        isOpen={isNewsletterModalOpen} 
+        onOpenChange={setIsNewsletterModalOpen}
+        subscribedSenders={newsletterSenders.filter(sender => sender.subscribed)}
+      />
     </div>
   );
 }

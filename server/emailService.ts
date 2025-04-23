@@ -1,7 +1,7 @@
 // emailService.ts
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { decode as base64Decode } from 'base64-url';
+// import { decode as base64Decode } from 'base64-url';
 import * as htmlToText from 'html-to-text';
 import dayjs from 'dayjs';
 
@@ -59,7 +59,7 @@ export class EmailService {
 
     const parts = message.payload.parts || [];
     for (const part of parts) {
-      const data = base64Decode(part.body.data || '');
+      const data = Buffer.from(part.body.data, 'base64').toString('utf-8');
       if (part.mimeType === 'text/plain') {
         content.plain_text = data;
       } else if (part.mimeType === 'text/html') {
@@ -116,32 +116,54 @@ export class EmailService {
 
     return newsletters;
   }
-
   public async getNewsletterAuthors(maxResults = 100): Promise<[string, string][]> {
-    const newsletters = await this.getNewsletters(maxResults);
+    const date = dayjs().subtract(7, 'days').format('YYYY/MM/DD');
+    const filters = [
+      `after:${date}`,
+      'header:List-Unsubscribe',
+      'from:@substack.com',
+      'from:@mailchimp.com',
+      'from:@convertkit.com',
+      'subject:newsletter',
+      'subject:digest'
+    ];
+    const query = filters.join(' OR ');
+  
+    const listRes = await this.gmail.users.messages.list({ userId: 'me', q: query, maxResults });
+    const messages = listRes.data.messages || [];
+  
     const seen = new Set<string>();
     const authors: [string, string][] = [];
-
     const emailRegex = /^(.*?)(?:<([\w.-]+@[\w.-]+)>)?$/;
-
-    for (const n of newsletters) {
-      const raw = n.from.trim();
+  
+    const metadataResponses = await Promise.all(
+      messages.map(m => this.gmail.users.messages.get({
+        userId: 'me',
+        id: m.id!,
+        format: 'metadata',
+        metadataHeaders: ['From']
+      }))
+    );
+  
+    for (const res of metadataResponses) {
+      const raw = res.data.payload.headers?.find(h => h.name === 'From')?.value?.trim();
+      if (!raw) continue;
+  
       const match = emailRegex.exec(raw);
-      let name = '', email = '';
-
-      if (match) {
-        name = match[2] ? match[1].trim().replace(/^"|"$/g, '') : '';
-        email = (match[2] || match[1]).toLowerCase().trim();
-        if (!/^[\w.-]+@[\w.-]+$/.test(email)) continue;
-
-        const id = `${name}|${email}`;
-        if (!seen.has(id)) {
-          seen.add(id);
-          authors.push([name, email]);
-        }
+      if (!match) continue;
+  
+      const name = match[2] ? match[1].trim().replace(/^"|"$/g, '') : '';
+      const email = (match[2] || match[1]).toLowerCase().trim();
+      if (!/^[\w.-]+@[\w.-]+$/.test(email)) continue;
+  
+      const id = `${name}|${email}`;
+      if (!seen.has(id)) {
+        seen.add(id);
+        authors.push([name, email]);
       }
     }
-
+  
     return authors.sort((a, b) => a[1].split('@')[1].localeCompare(b[1].split('@')[1]));
   }
+  
 }
