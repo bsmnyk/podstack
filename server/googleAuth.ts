@@ -126,6 +126,10 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     
     // Generate a JWT token for the user
     const jwtToken = generateToken(user);
+
+    // Check if it's the user's first login
+    const isFirstLogin = await storage.isFirstTimeLogin(user.id);
+    console.log('isFirstLogin', isFirstLogin);
     
     // Create HTML response page that sends a message to the opener
     const successHtml = `
@@ -149,7 +153,8 @@ export async function handleGoogleCallback(req: Request, res: Response) {
             provider: 'google',
             success: true,
             jwt: "${jwtToken}",
-            tokens: ${JSON.stringify(tokens)}
+            tokens: ${JSON.stringify(tokens)},
+            isFirstLogin: ${isFirstLogin}
           }, window.location.origin);
           
           // Close this window after a short delay
@@ -198,77 +203,6 @@ export async function handleGoogleCallback(req: Request, res: Response) {
   }
 }
 
-// Exchange code for tokens API endpoint handler
-export async function handleTokenExchange(req: Request, res: Response) {
-  try {
-    const { code } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({ message: 'Authorization code is required' });
-    }
-    
-    // Exchange code for tokens
-    const tokens = await exchangeCodeForTokens(code);
-    
-    if (!tokens.access_token) {
-      return res.status(400).json({ message: 'Failed to get access token' });
-    }
-    
-    // Get user information
-    const userInfo = await getUserInfo(tokens.access_token);
-    
-    if (!userInfo.email) {
-      return res.status(400).json({ message: 'Failed to get user email' });
-    }
-    
-    // Look up existing user or create a new one
-    let user = await storage.getUserByEmail(userInfo.email);
-    
-    if (!user) {
-      // Create a new user
-      user = await storage.createUser({
-        username: userInfo.email.split('@')[0],
-        email: userInfo.email,
-        provider: 'google',
-        providerId: userInfo.id || '',
-        name: userInfo.name || '',
-        avatarUrl: userInfo.picture || '',
-        password: '', // Not used for OAuth users
-      });
-    }
-    
-    // Create a session for the user
-    req.session.userId = user.id;
-    
-    // Store the tokens in the database
-    await storage.saveUserToken({
-      userId: user.id,
-      provider: 'google',
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token || null,
-      idToken: tokens.id_token || null,
-      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null
-    });
-    
-    // Generate a JWT token for the user
-    const jwtToken = generateToken(user);
-    
-    // Return the JWT token and user info
-    res.json({
-      jwt: jwtToken,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl
-      }
-    });
-  } catch (error) {
-    console.error('Token exchange error:', error);
-    res.status(500).json({ message: 'Failed to exchange code for tokens' });
-  }
-}
 
 // Fetch emails from Gmail
 export async function fetchGmailEmails(accessToken: string, query = 'category:primary is:unread label:newsletter', maxResults = 10) {

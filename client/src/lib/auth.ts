@@ -87,13 +87,14 @@ export function setupAuthMessageListener(
     jwt?: string;
     user?: User;
     error?: string;
+    isFirstLogin?: boolean; // Add isFirstLogin property
   }) => void
 ): () => void {
   const handleMessage = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
 
     // Handle direct message from the OAuth popup
-    const { type, provider, success, jwt, tokens, error } = event.data || {};
+    const { type, provider, success, jwt, tokens, isFirstLogin, error } = event.data || {};
     if (type === "auth_callback") {
       if (success && jwt) {
         // Store JWT token
@@ -109,7 +110,8 @@ export function setupAuthMessageListener(
           provider: provider || "google",
           success: true,
           jwt,
-          tokens
+          tokens,
+          isFirstLogin
         });
       } else if (error) {
         callback({

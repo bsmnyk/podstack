@@ -4,8 +4,9 @@ import { storage } from "./storage";
 import { setupAuthRoutes } from "./auth";
 import { z } from "zod";
 import { insertCategorySchema, insertNewsletterSchema, insertUserNewsletterSchema } from "@shared/schema";
-import { getAuthUrl, handleGoogleCallback, handleTokenExchange, fetchGmailEmails } from "./googleAuth";
+import { getAuthUrl, handleGoogleCallback, fetchGmailEmails } from "./googleAuth";
 import { authMiddleware, googleAuthMiddleware } from "./middleware";
+import { EmailService } from "./emailService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
@@ -18,8 +19,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/auth/callback", handleGoogleCallback);
-
-  app.post("/api/auth/google/exchange", handleTokenExchange);
 
   // Gmail API routes
   app.get("/api/gmail/messages", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
@@ -35,8 +34,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Newsletter Sender routes
+  app.get("/api/newsletter-senders", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
+    try {
+      const emailService = new EmailService(req.googleToken.accessToken);
+      const authors = await emailService.getNewsletterAuthors(100);
+
+      // Store these authors in the database
+      const senders = [];
+      for (const [name, email] of authors) {
+        const domain = email.split('@')[1];
+        // Check if sender already exists
+        let sender = await storage.getNewsletterSenderByEmail(email);
+        if (!sender) {
+          sender = await storage.createNewsletterSender({
+            name,
+            email,
+            domain,
+            emailCount: 1 // This would be calculated from actual emails
+          });
+        } else {
+          // Increment email count (mock implementation)
+          sender = await storage.createNewsletterSender({ // Using create for simplicity in MemStorage
+            ...sender,
+            emailCount: sender.emailCount + 1
+          });
+        }
+        senders.push(sender);
+      }
+
+      res.json(senders);
+    } catch (error) {
+      console.error("Error fetching newsletter senders:", error);
+      res.status(500).json({ message: "Failed to fetch newsletter senders" });
+    }
+  });
+
+  // Subscribe to newsletter senders
+  app.post("/api/user/newsletter-senders", authMiddleware, async (req: any, res) => {
+    try {
+      const { senderEmails } = req.body;
+
+      if (!Array.isArray(senderEmails)) {
+        return res.status(400).json({ message: "Invalid data format" });
+      }
+
+      const subscriptions = [];
+      for (const email of senderEmails) {
+        // Check if subscription already exists
+        let subscription = await storage.getUserNewsletterSender(req.user.id, email);
+        if (!subscription) {
+          subscription = await storage.saveUserNewsletterSender({
+            userId: req.user.id,
+            senderEmail: email,
+            subscribed: true
+          });
+        } else {
+          // Update existing subscription
+          subscription = await storage.updateUserNewsletterSender(
+            req.user.id,
+            email,
+            true // Ensure subscribed is true
+          );
+        }
+        subscriptions.push(subscription);
+      }
+
+      res.status(201).json(subscriptions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to subscribe to newsletter senders" });
+    }
+  });
+
+  // Update newsletter sender subscription
+  app.put("/api/user/newsletter-senders/:email", authMiddleware, async (req: any, res) => {
+    try {
+      const { email } = req.params;
+      const { subscribed } = req.body;
+
+      if (typeof subscribed !== 'boolean') {
+        return res.status(400).json({ message: "Invalid data format" });
+      }
+
+      const subscription = await storage.updateUserNewsletterSender(
+        req.user.id,
+        email,
+        subscribed
+      );
+
+      if (!subscription) {
+        return res.status(404).json({ message: "Subscription not found" });
+      }
+
+      res.json(subscription);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update subscription" });
+    }
+  });
+
+  // Get user's newsletter sender subscriptions
+  app.get("/api/user/newsletter-senders", authMiddleware, async (req: any, res) => {
+    try {
+      const subscriptions = await storage.getUserNewsletterSenders(req.user.id);
+      res.json(subscriptions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch subscriptions" });
+    }
+  });
+
+
   // API Routes - prefix all routes with /api
-  
+
   // Categories
   app.get("/api/categories", async (_req, res) => {
     try {

@@ -1,5 +1,5 @@
 import { pgTable, text, serial, integer, timestamp, boolean, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // User schema
@@ -89,6 +89,38 @@ export const insertUserNewsletterSchema = createInsertSchema(userNewsletters).om
   savedAt: true,
 });
 
+// Newsletter Senders schema
+export const newsletterSenders = pgTable("newsletter_senders", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  domain: text("domain").notNull(),
+  emailCount: integer("email_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertNewsletterSenderSchema = createInsertSchema(newsletterSenders).omit({
+  id: true,
+  createdAt: true,
+});
+
+// User Newsletter Senders (Subscriptions) schema
+export const userNewsletterSenders = pgTable("user_newsletter_senders", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  senderEmail: text("sender_email").notNull(),
+  subscribed: boolean("subscribed").default(true).notNull(),
+  subscribedAt: timestamp("subscribed_at").defaultNow().notNull(),
+});
+
+export const insertUserNewsletterSenderSchema = createInsertSchema(userNewsletterSenders).omit({
+  id: true,
+  subscribedAt: true,
+});
+
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -104,3 +136,9 @@ export type InsertUserToken = z.infer<typeof insertUserTokenSchema>;
 
 export type UserNewsletter = typeof userNewsletters.$inferSelect;
 export type InsertUserNewsletter = z.infer<typeof insertUserNewsletterSchema>;
+
+export type NewsletterSender = typeof newsletterSenders.$inferSelect;
+export type InsertNewsletterSender = z.infer<typeof insertNewsletterSenderSchema>;
+
+export type UserNewsletterSender = typeof userNewsletterSenders.$inferSelect;
+export type InsertUserNewsletterSender = z.infer<typeof insertUserNewsletterSenderSchema>;

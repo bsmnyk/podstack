@@ -8,7 +8,11 @@ import {
   type UserNewsletter, 
   type InsertUserNewsletter,
   type UserToken,
-  type InsertUserToken
+  type InsertUserToken,
+  type NewsletterSender,
+  type InsertNewsletterSender,
+  type UserNewsletterSender,
+  type InsertUserNewsletterSender
 } from "@shared/schema";
 
 interface QueryOptions {
@@ -52,6 +56,20 @@ export interface IStorage {
   getUserNewsletterByIds(userId: number, newsletterId: number): Promise<UserNewsletter | undefined>;
   saveNewsletterForUser(data: InsertUserNewsletter): Promise<UserNewsletter>;
   removeNewsletterForUser(userId: number, newsletterId: number): Promise<void>;
+
+  // Newsletter Sender methods
+  getNewsletterSenders(): Promise<NewsletterSender[]>;
+  createNewsletterSender(sender: InsertNewsletterSender): Promise<NewsletterSender>;
+  getNewsletterSenderByEmail(email: string): Promise<NewsletterSender | undefined>;
+
+  // User Newsletter Sender methods
+  getUserNewsletterSenders(userId: number): Promise<UserNewsletterSender[]>;
+  saveUserNewsletterSender(data: InsertUserNewsletterSender): Promise<UserNewsletterSender>;
+  updateUserNewsletterSender(userId: number, senderEmail: string, subscribed: boolean): Promise<UserNewsletterSender | undefined>;
+  getUserNewsletterSender(userId: number, senderEmail: string): Promise<UserNewsletterSender | undefined>;
+
+  // First-time login detection
+  isFirstTimeLogin(userId: number): Promise<boolean>;
 }
 
 // In-memory storage implementation
@@ -61,20 +79,26 @@ export class MemStorage implements IStorage {
   private categories: Map<number, Category>;
   private newsletters: Map<number, Newsletter>;
   private userNewsletters: Map<string, UserNewsletter>;
-  
+  private newsletterSenders: Map<number, NewsletterSender>;
+  private userNewsletterSenders: Map<string, UserNewsletterSender>;
+
   private userId: number = 1;
   private userTokenId: number = 1;
   private categoryId: number = 1;
   private newsletterId: number = 1;
   private userNewsletterId: number = 1;
-  
+  private newsletterSenderId: number = 1;
+  private userNewsletterSenderId: number = 1;
+
   constructor() {
     this.users = new Map();
     this.userTokens = new Map();
     this.categories = new Map();
     this.newsletters = new Map();
     this.userNewsletters = new Map();
-    
+    this.newsletterSenders = new Map();
+    this.userNewsletterSenders = new Map();
+
     // Initialize with sample data
     this.initSampleData();
   }
@@ -366,7 +390,75 @@ export class MemStorage implements IStorage {
     const key = `${userId}-${newsletterId}`;
     this.userNewsletters.delete(key);
   }
-  
+
+  // Newsletter Sender methods
+  async getNewsletterSenders(): Promise<NewsletterSender[]> {
+    return Array.from(this.newsletterSenders.values());
+  }
+
+  async createNewsletterSender(insertSender: InsertNewsletterSender): Promise<NewsletterSender> {
+    const id = this.newsletterSenderId++;
+    const now = new Date();
+    const sender: NewsletterSender = {
+      ...insertSender,
+      id,
+      createdAt: now,
+      emailCount: insertSender.emailCount || 0, // Provide default value
+    };
+    this.newsletterSenders.set(id, sender);
+    return sender;
+  }
+
+  async getNewsletterSenderByEmail(email: string): Promise<NewsletterSender | undefined> {
+    return Array.from(this.newsletterSenders.values()).find(
+      (sender) => sender.email === email
+    );
+  }
+
+  // User Newsletter Sender methods
+  async getUserNewsletterSenders(userId: number): Promise<UserNewsletterSender[]> {
+    return Array.from(this.userNewsletterSenders.values()).filter(
+      (subscription) => subscription.userId === userId
+    );
+  }
+
+  async saveUserNewsletterSender(data: InsertUserNewsletterSender): Promise<UserNewsletterSender> {
+    const id = this.userNewsletterSenderId++;
+    const now = new Date();
+    const userNewsletterSender: UserNewsletterSender = {
+      ...data,
+      id,
+      subscribedAt: now,
+      subscribed: data.subscribed || true, // Provide default value
+    };
+
+    const key = `${data.userId}-${data.senderEmail}`;
+    this.userNewsletterSenders.set(key, userNewsletterSender);
+    return userNewsletterSender;
+  }
+
+  async updateUserNewsletterSender(userId: number, senderEmail: string, subscribed: boolean): Promise<UserNewsletterSender | undefined> {
+    const key = `${userId}-${senderEmail}`;
+    const subscription = this.userNewsletterSenders.get(key);
+    if (!subscription) return undefined;
+
+    const updatedSubscription = { ...subscription, subscribed };
+    this.userNewsletterSenders.set(key, updatedSubscription);
+    return updatedSubscription;
+  }
+
+  async getUserNewsletterSender(userId: number, senderEmail: string): Promise<UserNewsletterSender | undefined> {
+    const key = `${userId}-${senderEmail}`;
+    return this.userNewsletterSenders.get(key);
+  }
+
+  // First-time login detection
+  async isFirstTimeLogin(userId: number): Promise<boolean> {
+    const userNewsletters = await this.getUserNewsletters(userId);
+    const userNewsletterSenders = await this.getUserNewsletterSenders(userId);
+    return userNewsletters.length === 0 && userNewsletterSenders.length === 0;
+  }
+
   // Initialize sample data
   private initSampleData() {
     // Create categories

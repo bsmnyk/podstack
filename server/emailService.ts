@@ -2,7 +2,7 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { decode as base64Decode } from 'base64-url';
-import htmlToText from 'html-to-text';
+import * as htmlToText from 'html-to-text';
 import dayjs from 'dayjs';
 
 interface MessageHeader {

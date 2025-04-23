@@ -7,7 +7,17 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { apiRequest } from "@/lib/queryClient";
+
+type NewsletterSender = {
+  id: number;
+  name: string;
+  email: string;
+  domain: string;
+  emailCount: number;
+  subscribed: boolean; // Add subscribed property
+};
 
 export default function Settings() {
   const { user, logout, showLoginModal, isAuthenticating } = useAuth();
@@ -17,6 +27,51 @@ export default function Settings() {
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
   const [downloadQuality, setDownloadQuality] = useState("high");
   const [playbackSpeed, setPlaybackSpeed] = useState([1]);
+
+  const [newsletterSenders, setNewsletterSenders] = useState<NewsletterSender[]>([]);
+  const [isLoadingSenders, setIsLoadingSenders] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchNewsletterSenders();
+    }
+  }, [user]);
+
+  const fetchNewsletterSenders = async () => {
+    setIsLoadingSenders(true);
+    try {
+      const response = await apiRequest("GET", "/api/user/newsletter-senders");
+      if (response.ok) {
+        const data = await response.json();
+        setNewsletterSenders(data);
+      }
+    } catch (error) {
+      console.error("Error fetching newsletter subscriptions:", error);
+    } finally {
+      setIsLoadingSenders(false);
+    }
+  };
+
+  const toggleSubscription = async (email: string, subscribed: boolean) => {
+    try {
+      const response = await apiRequest("PUT", `/api/user/newsletter-senders/${encodeURIComponent(email)}`, {
+        subscribed
+      });
+    
+      if (response.ok) {
+        // Update local state
+        setNewsletterSenders(prev => 
+          prev.map(sender =>  // Removed any type annotation
+            sender.email === email 
+              ? { ...sender, subscribed } 
+              : sender
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error updating subscription:", error);
+    }
+  };
   
   if (!user) {
     return (
@@ -82,7 +137,59 @@ export default function Settings() {
           </Button>
         </CardContent>
       </Card>
-      
+
+      {/* Newsletter Subscriptions Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Newsletter Subscriptions</CardTitle>
+          <CardDescription>Manage which newsletter senders you want to see content from</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingSenders ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {newsletterSenders.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">
+                  <p>You haven't subscribed to any newsletter senders yet.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => {/* Open newsletter selection dialog */}}
+                  >
+                    Add Newsletters
+                  </Button>
+                </div>
+              ) : (
+                newsletterSenders.map(sender => (
+                  <div key={sender.id} className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{sender.name || sender.email.split('@')[0]}</div>
+                      <div className="text-sm text-gray-500">{sender.email}</div>
+                    </div>
+                    <Switch
+                      checked={sender.subscribed}
+                      onCheckedChange={(checked) => toggleSubscription(sender.email, checked)}
+                    />
+                  </div>
+                ))
+              )}
+
+              <Button
+                variant="outline"
+                className="w-full mt-4"
+                onClick={() => {/* Open newsletter selection dialog */}}
+              >
+                Manage Newsletter Subscriptions
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Appearance Section */}
       <Card className="mb-6">
         <CardHeader>

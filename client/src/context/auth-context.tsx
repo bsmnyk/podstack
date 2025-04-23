@@ -13,6 +13,8 @@ interface AuthContextType {
     expiry_date?: number;
   } | null;
   jwt: string | null;
+  isFirstLogin: boolean;
+  setIsFirstLogin: (value: boolean) => void;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   showLoginModal: () => void;
@@ -24,6 +26,8 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticating: false,
   tokens: null,
   jwt: null,
+  isFirstLogin: false, // Add default value for isFirstLogin
+  setIsFirstLogin: () => {}, // Add default value for setIsFirstLogin
   loginWithGoogle: async () => {},
   logout: async () => {},
   showLoginModal: () => {},
@@ -57,6 +61,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [jwt, setJwt] = useState<string | null>(getJwtToken());
+  const [isFirstLogin, setIsFirstLogin] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch user on initial load
@@ -120,7 +125,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             console.error("Error fetching user data:", error);
           }
         }
+
+        console.log(data);
         
+        // Set first login status if provided
+        if (data.isFirstLogin !== undefined) {
+          setIsFirstLogin(data.isFirstLogin);
+          console.log('First user login');
+        }
+
         hideLoginModal();
         setIsAuthenticating(false);
         
@@ -177,6 +190,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isAuthenticating,
         tokens,
         jwt,
+        isFirstLogin,
+        setIsFirstLogin,
         loginWithGoogle,
         logout,
         showLoginModal,

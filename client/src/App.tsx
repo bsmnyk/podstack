@@ -16,6 +16,8 @@ import Home from "@/pages/home";
 import Categories from "@/pages/categories";
 import Settings from "@/pages/settings";
 import AuthCallback from "@/pages/auth-callback";
+import { NewsletterSelection } from "@/components/newsletter-selection";
+import React from "react"; // Import React
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -23,55 +25,58 @@ function Router() {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden relative">
-      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+    <React.Fragment>
+      <div className="flex h-screen w-screen overflow-hidden relative">
+        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <Switch>
-          <Route path="/auth/callback">
-            <AuthCallback />
-          </Route>
+        <main className="flex-1 flex flex-col h-full overflow-hidden">
+          <Switch>
+            <Route path="/auth/callback">
+              <AuthCallback />
+            </Route>
 
-          <Route path="/">
-            <>
-              <Header title="Dashboard" onMenuToggle={toggleSidebar} />
-              <div className="flex-1 overflow-y-auto p-4">
-                <Home />
-              </div>
-            </>
-          </Route>
+            <Route path="/">
+              <>
+                <Header title="Dashboard" onMenuToggle={toggleSidebar} />
+                <div className="flex-1 overflow-y-auto p-4">
+                  <Home />
+                </div>
+              </>
+            </Route>
 
-          <Route path="/categories">
-            <>
-              <Header title="Categories" onMenuToggle={toggleSidebar} />
-              <div className="flex-1 overflow-y-auto">
-                <Categories />
-              </div>
-            </>
-          </Route>
+            <Route path="/categories">
+              <>
+                <Header title="Categories" onMenuToggle={toggleSidebar} />
+                <div className="flex-1 overflow-y-auto">
+                  <Categories />
+                </div>
+              </>
+            </Route>
 
-          <Route path="/settings">
-            <>
-              <Header title="Settings" onMenuToggle={toggleSidebar} />
-              <div className="flex-1 overflow-y-auto">
-                <Settings />
-              </div>
-            </>
-          </Route>
+            <Route path="/settings">
+              <>
+                <Header title="Settings" onMenuToggle={toggleSidebar} />
+                <div className="flex-1 overflow-y-auto">
+                  <Settings />
+                </div>
+              </>
+            </Route>
 
-          <Route>
-            <>
-              <Header title="Not Found" onMenuToggle={toggleSidebar} />
-              <NotFound />
-            </>
-          </Route>
-        </Switch>
+            <Route>
+              <>
+                <Header title="Not Found" onMenuToggle={toggleSidebar} />
+                <NotFound />
+              </>
+            </Route>
+          </Switch>
 
-        <AudioPlayer />
-      </main>
+          <AudioPlayer />
+        </main>
 
-      
-    </div>
+
+      </div>
+      <NewsletterSelection />
+    </React.Fragment>
   );
 }
 

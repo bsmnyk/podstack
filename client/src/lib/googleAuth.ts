@@ -5,16 +5,6 @@ export function getGmailAuthUrl(): string {
   return `/api/auth/google/authorize`;
 }
 
-// Exchange authorization code for tokens
-export async function exchangeCodeForTokens(code: string) {
-  // return apiRequest('/api/auth/google/exchange', {
-  //   method: 'POST',
-  //   body: JSON.stringify({ code }),
-  //   headers: {
-  //     'Content-Type': 'application/json'
-  //   }
-  // });
-}
 
 // Set the credentials in the client-side storage
 export function setCredentials(tokens: any) {
