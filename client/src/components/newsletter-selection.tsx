@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
+import { Input } from "@/components/ui/input"; // Import Input component
+import Fuse from 'fuse.js'; // Import Fuse
 
 type NewsletterSender = {
   id: number;
@@ -28,6 +30,23 @@ export function NewsletterSelection({ isOpen: propIsOpen, onOpenChange: propOnOp
   const [senders, setSenders] = useState<NewsletterSender[]>([]);
   const [selectedSenders, setSelectedSenders] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(""); // Add state for search term
+
+  // Initialize Fuse.js
+  const fuse = useMemo(() => {
+    return new Fuse(senders, {
+      keys: ['name', 'email'], // Fields to search
+      threshold: 0.3, // Adjust for fuzziness (0 is exact, 1 is very fuzzy)
+    });
+  }, [senders]); // Re-initialize if senders change
+
+  // Filter senders based on search term
+  const filteredSenders = useMemo(() => {
+    if (!searchTerm) {
+      return senders; // Return all senders if search term is empty
+    }
+    return fuse.search(searchTerm).map(result => result.item); // Return fuzzy search results
+  }, [searchTerm, senders, fuse]); // Re-filter if search term, senders, or fuse instance changes
   
   useEffect(() => {
     // Open dialog when user is logged in, it's their first login, and tokens are available
@@ -129,11 +148,20 @@ export function NewsletterSelection({ isOpen: propIsOpen, onOpenChange: propOnOp
             </div>
           ) : (
             <>
+              {/* Search Input */}
+              <div className="mb-4">
+                <Input
+                  placeholder="Search newsletters..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
               <div className="flex justify-between mb-4">
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => setSelectedSenders(senders.map(s => s.email))}
+                  onClick={() => setSelectedSenders(senders.map(s => s.email))} // Select All should still use original senders
                 >
                   Select All
                 </Button>
@@ -146,8 +174,9 @@ export function NewsletterSelection({ isOpen: propIsOpen, onOpenChange: propOnOp
                 </Button>
               </div>
               
-              <div className="max-h-[400px] overflow-y-auto pr-2">
-                {senders.map((sender) => (
+              <div className="max-h-[250px] overflow-y-auto pr-2">
+                {/* Map over filteredSenders */}
+                {filteredSenders.map((sender) => (
                   <div key={sender.id} className="flex items-start space-x-3 py-2 border-b">
                     <Checkbox 
                       id={`sender-${sender.id}`}
@@ -169,9 +198,15 @@ export function NewsletterSelection({ isOpen: propIsOpen, onOpenChange: propOnOp
                   </div>
                 ))}
                 
+                {/* Show message if no senders or no filtered results */}
                 {senders.length === 0 && (
                   <div className="py-8 text-center text-gray-500">
                     No newsletter senders found in your inbox.
+                  </div>
+                )}
+                 {senders.length > 0 && filteredSenders.length === 0 && (
+                  <div className="py-8 text-center text-gray-500">
+                    No matching newsletters found.
                   </div>
                 )}
               </div>
