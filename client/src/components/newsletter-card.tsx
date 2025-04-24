@@ -11,9 +11,10 @@ type NewsletterCardProps = {
   newsletter: Newsletter;
   isFeatured?: boolean;
   isSaved?: boolean;
+  showActions?: boolean;
 };
 
-export function NewsletterCard({ newsletter, isFeatured = false, isSaved = false }: NewsletterCardProps) {
+export function NewsletterCard({ newsletter, isFeatured = false, isSaved = false, showActions = true }: NewsletterCardProps) {
   const { user } = useAuth();
   const { play } = useAudio();
   const { toast } = useToast();
@@ -113,21 +114,23 @@ export function NewsletterCard({ newsletter, isFeatured = false, isSaved = false
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
           {truncateText(newsletter.description, 80)}
         </p>
-        <div className="mt-3 flex items-center justify-between">
-          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-            <span className="material-icons text-sm mr-1">schedule</span>
-            <span>{Math.ceil(newsletter.duration / 60)} min</span>
+        {showActions && (
+          <div className="mt-3 flex items-center justify-between">
+            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+              <span className="material-icons text-sm mr-1">schedule</span>
+              <span>{Math.ceil(newsletter.duration / 60)} min</span>
+            </div>
+            <button
+              className="p-2 rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePlay();
+              }}
+            >
+              <span className="material-icons">play_arrow</span>
+            </button>
           </div>
-          <button 
-            className="p-2 rounded-full bg-primary text-white shadow-sm hover:bg-primary-dark"
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePlay();
-            }}
-          >
-            <span className="material-icons">play_arrow</span>
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

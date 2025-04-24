@@ -68,14 +68,12 @@ export function NewsletterSelection({ isOpen: propIsOpen, onOpenChange: propOnOp
       const response = await apiRequest("GET", "/api/newsletter-senders");
       if (response.ok) {
         const data = await response.json();
-        console.log('senders_data', data);
         setSenders(data);
         // Pre-selection logic is now handled in the separate useEffect
       }
     } catch (error) {
       console.error("Error fetching newsletter senders:", error);
     } finally {
-      console.log('Is Loading set to false');
       setIsLoading(false);
     }
   };

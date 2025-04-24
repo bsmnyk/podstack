@@ -18,6 +18,7 @@ import Settings from "@/pages/settings";
 import AuthCallback from "@/pages/auth-callback";
 import { NewsletterSelection } from "@/components/newsletter-selection";
 import React from "react"; // Import React
+import NewsletterViewPage from './pages/newsletter-view';
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,10 +33,16 @@ function Router() {
         <main className="flex-1 flex flex-col h-full overflow-hidden">
           <Switch>
             <Route path="/auth/callback">
-              <AuthCallback />
-            </Route>
+            <AuthCallback />
+          </Route>
 
-            <Route path="/">
+          <Route path="/newsletter/:id">
+            <div className="flex-1 overflow-y-auto p-4">
+              <NewsletterViewPage />
+            </div>
+          </Route>
+
+          <Route path="/">
               <>
                 <Header title="Dashboard" onMenuToggle={toggleSidebar} />
                 <div className="flex-1 overflow-y-auto p-4">

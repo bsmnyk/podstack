@@ -6,6 +6,5 @@ vite.config.ts.*
 *.tar.gz
 .venv
 *__pycache__
-*package-lock.json
 *.code-workspace
 credentials.json

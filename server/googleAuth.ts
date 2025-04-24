@@ -72,6 +72,74 @@ export async function getUserInfo(accessToken: string) {
   }
 }
 
+// Refresh access token using refresh token
+export async function refreshAccessToken(userId: number) {
+  try {
+    const userToken = await storage.getUserTokenByProvider(userId, 'google');
+    if (!userToken || !userToken.refreshToken) {
+      throw new Error('No refresh token found for user');
+    }
+
+    oauth2Client.setCredentials({
+      refresh_token: userToken.refreshToken,
+    });
+
+    const { credentials } = await oauth2Client.refreshAccessToken();
+
+    if (!credentials.access_token) {
+      throw new Error('Failed to refresh access token');
+    }
+
+    // Update tokens in storage
+    await storage.saveUserToken({
+      userId: userId,
+      provider: 'google',
+      accessToken: credentials.access_token,
+      refreshToken: credentials.refresh_token || userToken.refreshToken, // Use new refresh token if provided, otherwise keep old one
+      idToken: credentials.id_token || userToken.idToken, // Keep old ID token if new one not provided
+      expiresAt: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
+    });
+
+    console.log(`Access token refreshed for user ${userId}`);
+    return credentials.access_token;
+
+  } catch (error) {
+    console.error('Error refreshing access token:', error);
+    throw error;
+  }
+}
+
+// Get a valid access token, refreshing if necessary
+export async function getValidAccessToken(userId: number): Promise<string> {
+  try {
+    const userToken = await storage.getUserTokenByProvider(userId, 'google');
+
+    if (!userToken || !userToken.accessToken) {
+      throw new Error('No access token found for user');
+    }
+
+    const now = new Date();
+    const expiresAt = userToken.expiresAt ? new Date(userToken.expiresAt) : null;
+
+    // Check if token is expired or expires within the next 5 minutes
+    if (expiresAt && expiresAt.getTime() < now.getTime() + 5 * 60 * 1000) {
+      console.log(`Access token expired or near expiry for user ${userId}. Attempting refresh.`);
+      if (!userToken.refreshToken) {
+         throw new Error('Access token expired and no refresh token available');
+      }
+      return await refreshAccessToken(userId);
+    }
+
+    // Token is still valid
+    return userToken.accessToken;
+
+  } catch (error) {
+    console.error('Error getting valid access token:', error);
+    throw error;
+  }
+}
+
+
 // Handle Google OAuth callback
 export async function handleGoogleCallback(req: Request, res: Response) {
   try {
@@ -129,7 +197,6 @@ export async function handleGoogleCallback(req: Request, res: Response) {
 
     // Check if it's the user's first login
     const isFirstLogin = await storage.isFirstTimeLogin(user.id);
-    console.log('isFirstLogin', isFirstLogin);
     
     // Create HTML response page that sends a message to the opener
     const successHtml = `

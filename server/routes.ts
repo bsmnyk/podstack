@@ -4,8 +4,8 @@ import { storage } from "./storage";
 import { setupAuthRoutes } from "./auth";
 import { z } from "zod";
 import { insertCategorySchema, insertNewsletterSchema, insertUserNewsletterSchema } from "@shared/schema";
-import { getAuthUrl, handleGoogleCallback, fetchGmailEmails } from "./googleAuth";
-import { authMiddleware, googleAuthMiddleware } from "./middleware";
+import { getAuthUrl, handleGoogleCallback, fetchGmailEmails, getValidAccessToken } from "./googleAuth";
+import { authMiddleware } from "./middleware";
 import { EmailService } from "./emailService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -20,24 +20,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/auth/callback", handleGoogleCallback);
 
-  // Gmail API routes
-  app.get("/api/gmail/messages", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
-    try {
-      const query = req.query.q as string || "category:primary is:unread label:newsletter";
-      const maxResults = req.query.maxResults ? parseInt(req.query.maxResults as string) : 10;
-
-      const emails = await fetchGmailEmails(req.googleToken.accessToken, query, maxResults);
-      res.json(emails);
-    } catch (error) {
-      console.error("Error fetching Gmail messages:", error);
-      res.status(500).json({ message: "Failed to fetch Gmail messages" });
-    }
-  });
-
   // Newsletter Sender routes
-  app.get("/api/newsletter-senders", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
+  app.get("/api/newsletter-senders", authMiddleware, async (req: any, res) => {
     try {
-      const emailService = new EmailService(req.googleToken.accessToken);
+      const userId = req.user.id;
+      const accessToken = await getValidAccessToken(userId);
+
+      if (!accessToken) {
+        return res.status(403).json({ message: 'Google account not linked or token expired. Please re-authenticate.' });
+      }
+
+      const emailService = new EmailService(accessToken);
       const authors = await emailService.getNewsletterAuthors(100);
 
       // Store these authors in the database
@@ -143,54 +136,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fetch and store newsletters from subscribed senders
-  app.get("/api/user/subscribed-newsletters", authMiddleware, googleAuthMiddleware, async (req: any, res) => {
+  app.get("/api/user/subscribed-newsletters", authMiddleware, async (req: any, res) => {
     try {
+      const userId = req.user.id;
+      const accessToken = await getValidAccessToken(userId);
+
+      if (!accessToken) {
+        return res.status(403).json({ message: 'Google account not linked or token expired. Please re-authenticate.' });
+      }
+
       // Get user's subscribed senders
       const subscriptions = await storage.getUserNewsletterSenders(req.user.id);
       const subscribedSenders = subscriptions.filter(sub => sub.subscribed).map(sub => sub.senderEmail);
-      
+
       if (subscribedSenders.length === 0) {
-        return res.json([]);
+        // Get all subscribed newsletters for the user, even if no new ones are fetched
+        const allNewsletters = await storage.getSubscribedNewsletters(req.user.id, {
+          limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+          offset: req.query.offset ? parseInt(req.query.offset as string) : undefined
+        });
+        return res.json(allNewsletters);
       }
-      
-      // Fetch newsletters from subscribed senders
-      const emailService = new EmailService(req.googleToken.accessToken);
-      const newsletters = await emailService.getNewslettersFromSenders(subscribedSenders);
-      
-      // Store newsletters in the database
+
+      // Get the latest newsletter timestamp for each subscribed sender from storage
+      const latestTimestamps = await storage.getLatestNewsletterTimestamps(req.user.id, subscribedSenders);
+
+      // Fetch newsletters from subscribed senders, filtering by the latest timestamp
+      const emailService = new EmailService(accessToken);
+      const newsletters = await emailService.getNewslettersFromSenders(subscribedSenders, latestTimestamps);
+
+      // Store newly fetched newsletters in the database
       const storedNewsletters = [];
       for (const newsletter of newsletters) {
-        // Check if newsletter already exists to avoid duplicates
+        // Check if newsletter already exists to avoid duplicates (this check might be redundant
+        // if the timestamp filter works perfectly, but it's a good safeguard)
         const existingNewsletters = await storage.getSubscribedNewslettersBySender(
-          req.user.id, 
-          newsletter.from
+          req.user.id,
+          newsletter.fromEmail
         );
-        
+
         const isDuplicate = existingNewsletters.some(
           existing => existing.subject === newsletter.subject && existing.date === newsletter.date
         );
-        
+
         if (!isDuplicate) {
           const storedNewsletter = await storage.saveSubscribedNewsletter({
             userId: req.user.id,
-            senderEmail: newsletter.from,
+            senderEmail: newsletter.fromEmail,
             subject: newsletter.subject,
-            from: newsletter.from,
+            from: newsletter.fromName,
             date: newsletter.date,
             plainText: newsletter.plain_text,
             markdown: newsletter.markdown
           });
-          
+
           storedNewsletters.push(storedNewsletter);
         }
       }
-      
+
       // Get all subscribed newsletters for the user, including previously stored ones
       const allNewsletters = await storage.getSubscribedNewsletters(req.user.id, {
         limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
         offset: req.query.offset ? parseInt(req.query.offset as string) : undefined
       });
-      
+
       res.json(allNewsletters);
     } catch (error) {
       console.error("Error fetching subscribed newsletters:", error);

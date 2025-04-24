@@ -79,6 +79,9 @@ export interface IStorage {
   deleteSubscribedNewsletter(id: number): Promise<void>;
   getSubscribedNewsletterById(id: number): Promise<SubscribedNewsletter | undefined>;
 
+  // Get latest newsletter timestamp per sender for a user
+  getLatestNewsletterTimestamps(userId: number, senderEmails: string[]): Promise<{ [senderEmail: string]: Date | undefined }>;
+
   // First-time login detection
   isFirstTimeLogin(userId: number): Promise<boolean>;
 }
@@ -521,6 +524,24 @@ export class MemStorage implements IStorage {
   
   async getSubscribedNewsletterById(id: number): Promise<SubscribedNewsletter | undefined> {
     return this.subscribedNewsletters.get(id);
+  }
+
+  async getLatestNewsletterTimestamps(userId: number, senderEmails: string[]): Promise<{ [senderEmail: string]: Date | undefined }> {
+    const latestTimestamps: { [senderEmail: string]: Date | undefined } = {};
+
+    for (const senderEmail of senderEmails) {
+      const newsletters = Array.from(this.subscribedNewsletters.values())
+        .filter(newsletter => newsletter.userId === userId && newsletter.senderEmail === senderEmail)
+        .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()); // Sort descending by date
+
+      if (newsletters.length > 0) {
+        latestTimestamps[senderEmail] = new Date(newsletters[0].receivedAt);
+      } else {
+        latestTimestamps[senderEmail] = undefined;
+      }
+    }
+
+    return latestTimestamps;
   }
 
   // First-time login detection

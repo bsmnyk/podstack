@@ -12,7 +12,8 @@ interface MessageHeader {
 
 interface NewsletterContent {
   subject: string;
-  from: string;
+  fromName: string;
+  fromEmail: string;
   date: string;
   plain_text?: string;
   markdown?: string;
@@ -51,11 +52,23 @@ export class EmailService {
 
   private extractContent(message: any): NewsletterContent {
     const headers = message.payload.headers;
-    const from = this.extractHeader(headers, 'From');
+    const rawFrom = this.extractHeader(headers, 'From');
     const subject = this.extractHeader(headers, 'Subject');
     const date = this.extractHeader(headers, 'Date');
 
-    const content: NewsletterContent = { subject, from, date };
+    // Use regex from getNewsletterAuthors to parse 'From' header
+    const emailRegex = /^(.*?)(?:<([\w.-]+@[\w.-]+)>)?$/;
+    const match = emailRegex.exec(rawFrom);
+
+    let fromName = '';
+    let fromEmail = '';
+
+    if (match) {
+      fromName = match[2] ? match[1].trim().replace(/^"|"$/g, '') : '';
+      fromEmail = (match[2] || match[1]).toLowerCase().trim();
+    }
+
+    const content: NewsletterContent = { subject, fromName, fromEmail, date };
 
     // Handle different message structures
     if (message.payload.body && message.payload.body.data) {
@@ -63,7 +76,8 @@ export class EmailService {
       try {
         const data = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');
         content.plain_text = data;
-        content.markdown = htmlToText.convert(data, { wordwrap: false });
+        // content.markdown = htmlToText.convert(data, { wordwrap: false });
+        content.markdown = data;
       } catch (error) {
         console.error("Error decoding message body:", error);
       }
@@ -78,6 +92,7 @@ export class EmailService {
               content.plain_text = data;
             } else if (part.mimeType === 'text/html') {
               content.markdown = htmlToText.convert(data, { wordwrap: false });
+              content.markdown = data;
             }
           } catch (error) {
             console.error("Error decoding part body:", error);
@@ -91,7 +106,8 @@ export class EmailService {
                 if (nestedPart.mimeType === 'text/plain') {
                   content.plain_text = data;
                 } else if (nestedPart.mimeType === 'text/html') {
-                  content.markdown = htmlToText.convert(data, { wordwrap: false });
+                  content.markdown = data;
+                  // content.markdown = htmlToText.convert(data, { wordwrap: false });
                 }
               } catch (error) {
                 console.error("Error decoding nested part body:", error);
@@ -133,20 +149,43 @@ export class EmailService {
     return newsletters;
   }
 
-  public async getNewslettersFromSenders(senderEmails: string[], maxResults = 100): Promise<NewsletterContent[]> {
-    const date = dayjs().subtract(1, 'year').format('YYYY/MM/DD');
-    const fromFilters = senderEmails.map(email => `from:${email}`);
-    const query = `after:${date} ` + fromFilters.join(' OR ');
+  public async getNewslettersFromSenders(
+    senderEmails: string[],
+    latestTimestamps?: { [senderEmail: string]: Date | undefined },
+    maxResults = 100
+  ): Promise<NewsletterContent[]> {
+    const fromFilters = senderEmails.map(email => {
+      let filter = `from:${email}`;
+      const latestTimestamp = latestTimestamps?.[email];
+      if (latestTimestamp) {
+        // Format date as YYYY/MM/DD for Gmail API query
+        const formattedDate = dayjs(latestTimestamp).format('YYYY/MM/DD');
+        filter += ` after:${formattedDate}`;
+      }
+      return filter;
+    });
+
+    // Combine filters with OR, but ensure each sender filter includes its potential date filter
+    const query = fromFilters.join(' OR ');
+
+    if (!query) {
+      return []; // No senders to query
+    }
 
     const listRes = await this.gmail.users.messages.list({ userId: 'me', q: query, maxResults });
     const messages = listRes.data.messages || [];
 
     const newsletters: NewsletterContent[] = [];
     for (const m of messages) {
-      const res = await this.gmail.users.messages.get({ userId: 'me', id: m.id!, format: 'full' });
-      const msg = res.data;
-      if (this.isNewsletter(msg.payload.headers)) {
-        newsletters.push(this.extractContent(msg));
+      try {
+        const res = await this.gmail.users.messages.get({ userId: 'me', id: m.id!, format: 'full' });
+        const msg = res.data;
+        if (this.isNewsletter(msg.payload.headers)) {
+          newsletters.push(this.extractContent(msg));
+        }
+      } catch (error) {
+        console.error(`Error fetching message ${m.id}:`, error);
+        // Continue to the next message even if one fails
       }
     }
 
